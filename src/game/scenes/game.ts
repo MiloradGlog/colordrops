@@ -1,4 +1,4 @@
-// The game scene: orchestrates the relations from spec.md (scheduler→drop,
+// The game scene: orchestrates the relations from spec.md (sequencer→drop,
 // drop→segment, segment→siblings, outer↔inner win check) and renders the
 // wheel. Update mutates state; render only reads — one frame, one truth.
 
@@ -7,9 +7,8 @@ import type { Input } from "../../engine/input";
 import type { SaveData } from "../../engine/save";
 import { save } from "../../engine/save";
 import { Rng } from "../../engine/rng";
-import { PALETTE, levelConfig, par, type LevelConfig } from "../config";
+import { PALETTE, par } from "../config";
 import {
-  genTargets,
   boundaries,
   centers,
   idealExtents,
@@ -19,7 +18,7 @@ import {
   mod1,
   type Extent,
 } from "../wheel";
-import { applyCatch } from "../behaviors/catch";
+import { applyCatch, applyShrink } from "../behaviors/catch";
 import { rotate, type Rotatable } from "../behaviors/rotate";
 import {
   makeDrop,
@@ -31,11 +30,13 @@ import {
   type Drop,
 } from "../drop";
 import { pickColor } from "../scheduler";
+import { endlessConfig, type RunConfig } from "../levels";
 import { strings } from "../../ui/strings";
 
 const TAU = Math.PI * 2;
 const SNAP_PER_SEG = 0.09; // lock sequence: seconds per segment click
 const MERGE_S = 0.45;
+const INTRO_S = 2.6; // rule-change banner hold time
 
 interface Ripple {
   t: number;
@@ -56,13 +57,15 @@ type Phase = "playing" | "locking" | "won";
 export class GameScene implements Scene {
   autopilot = false;
 
-  private cfg!: LevelConfig;
+  private cfg!: RunConfig;
   private targets!: number[];
   private shares!: number[];
   private displayShares!: number[];
   private cents!: number[];
   private bounds!: number[];
-  private schedRng!: Rng;
+  private rng!: Rng;
+  private seqIdx = 0;
+  private endlessBoard = 1;
   private wheel: Rotatable;
   private phase: Phase = "playing";
   private drop: Drop | null = null;
@@ -70,6 +73,7 @@ export class GameScene implements Scene {
   private spawnTimer = 0;
   private caught = 0;
   private levelPar = 0;
+  private age = 0;
   private lockT = 0;
   private lockStart: Extent[] = [];
   private pulses!: number[];
@@ -81,22 +85,24 @@ export class GameScene implements Scene {
     private input: Input,
     private canvas: HTMLCanvasElement,
     private saveData: SaveData,
+    cfg: RunConfig,
+    private onExit: () => void,
   ) {
     this.wheel = { theta: 0, omega: 0, radius: 100, input, locked: false };
-    this.startLevel(this.saveData.progress.level);
+    this.reset(cfg);
   }
 
-  startLevel(level: number): void {
-    const cfg = levelConfig(level, 1234567 + level * 101);
+  reset(cfg: RunConfig): void {
     this.cfg = cfg;
-    const rng = new Rng(cfg.seed);
-    this.targets = genTargets(rng, cfg.n, cfg.minShare);
-    this.shares = new Array(cfg.n).fill(1 / cfg.n);
+    const n = cfg.targets.length;
+    this.targets = [...cfg.targets];
+    this.shares = new Array(n).fill(1 / n);
     this.displayShares = [...this.shares];
     this.cents = centers(this.targets);
     this.bounds = boundaries(this.targets);
-    this.schedRng = new Rng((cfg.seed ^ 0x9e3779b9) >>> 0);
-    this.levelPar = par(this.targets, 1 / cfg.n, cfg.growth);
+    this.rng = new Rng((cfg.seed ^ 0x9e3779b9) >>> 0);
+    this.seqIdx = 0;
+    this.levelPar = par(this.targets, 1 / n, cfg.growth);
     this.phase = "playing";
     this.wheel.theta = 0;
     this.wheel.omega = 0;
@@ -105,15 +111,21 @@ export class GameScene implements Scene {
     this.fallthrough = [];
     this.spawnTimer = cfg.intervalS * 0.6; // first drop comes quickly
     this.caught = 0;
+    this.age = 0;
     this.lockT = 0;
-    this.pulses = new Array(cfg.n).fill(0);
+    this.pulses = new Array(n).fill(0);
     this.ripples = [];
     this.particles = [];
+  }
+
+  private n(): number {
+    return this.targets.length;
   }
 
   update(dt: number): void {
     const L = this.layout();
     this.wheel.radius = L.outerR;
+    this.age += dt;
 
     if (this.phase === "playing") {
       if (this.autopilot) this.autoSteer();
@@ -121,16 +133,19 @@ export class GameScene implements Scene {
       this.updateSpawning(dt, L);
     } else if (this.phase === "locking") {
       this.lockT += dt;
-      if (this.lockT >= this.cfg.n * SNAP_PER_SEG + MERGE_S) this.enterWon();
+      if (this.lockT >= this.n() * SNAP_PER_SEG + MERGE_S) this.enterWon();
     } else if (this.phase === "won") {
       if (this.input.pointer.justPressed) {
-        this.saveData.progress.level = this.cfg.level + 1;
-        save(this.saveData);
-        this.startLevel(this.cfg.level + 1);
+        if (this.cfg.sequence === null) {
+          this.endlessBoard++;
+          this.reset(endlessConfig(this.endlessBoard));
+        } else {
+          this.onExit();
+        }
       }
     }
 
-    for (let i = 0; i < this.cfg.n; i++) {
+    for (let i = 0; i < this.n(); i++) {
       const s = this.displayShares[i]!;
       this.displayShares[i] = s + (this.shares[i]! - s) * Math.min(1, dt * 10);
       this.pulses[i] = Math.max(0, this.pulses[i]! - dt * 3);
@@ -150,12 +165,18 @@ export class GameScene implements Scene {
     this.input.endTick();
   }
 
+  /** Deterministic choreography for levels; seeded weighted RNG for endless. */
+  private nextColor(): number {
+    const seq = this.cfg.sequence;
+    if (seq) return seq[this.seqIdx++ % seq.length]!;
+    return pickColor(this.rng, this.targets, this.shares, this.cfg.epsilon);
+  }
+
   private updateSpawning(dt: number, L: Layout): void {
     if (!this.drop) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
-        const c = pickColor(this.schedRng, this.targets, this.shares, this.cfg.epsilon);
-        this.drop = makeDrop(c, Math.max(10, L.outerR * 0.09));
+        this.drop = makeDrop(this.nextColor(), Math.max(10, L.outerR * 0.09));
         this.spawnTimer = this.cfg.intervalS;
       }
       return;
@@ -170,23 +191,35 @@ export class GameScene implements Scene {
     const topTurn = mod1((-Math.PI / 2 - this.wheel.theta) / TAU);
     const extents = drawnExtents(idealExtents(this.cents, this.shares));
     const idx = segmentAt(extents, topTurn);
-    if (idx === d.colorIdx) {
-      this.shares = applyCatch(this.shares, idx, this.cfg.growth);
-      this.caught++;
-      this.pulses[idx] = 1;
-      this.ripples.push({ t: 0, colorIdx: idx });
-      enter(d, "absorbed");
-      if (isAligned(this.shares, this.targets, this.cfg.epsilon)) this.beginLock();
-    } else if (idx === -1) {
-      d.behind = true; // slips through the dark gap, falls behind the wheel
+
+    if (idx === -1) {
+      // dark gap: the free dodge — slips through, touches nothing, costs nothing
+      d.behind = true;
       enter(d, "missed");
       d.vy = Math.max(d.vy, 100);
       this.fallthrough.push(d);
       this.drop = null;
-    } else {
-      this.spawnSplash(d, L);
-      enter(d, "splashed");
+      return;
     }
+
+    // every absorbed drop counts, correct or wrong (spec.md → scoring)
+    this.caught++;
+    this.ripples.push({ t: 0, colorIdx: d.colorIdx });
+    enter(d, "absorbed");
+
+    if (idx === d.colorIdx) {
+      this.shares = applyCatch(this.shares, idx, this.cfg.growth);
+      this.pulses[idx] = 1;
+    } else if (this.cfg.wrongCatch === "shrinkDrop") {
+      this.shares = applyShrink(this.shares, d.colorIdx, this.cfg.growth);
+      this.spawnSplash(d, L); // shrink is loud: burst in the shrinking color
+    } else if (this.cfg.wrongCatch === "shrinkSelf") {
+      this.shares = applyShrink(this.shares, idx, this.cfg.growth);
+      this.spawnSplash(d, L);
+    }
+    // wrongCatch "none": absorbed, counted, no physical effect
+
+    if (isAligned(this.shares, this.targets, this.cfg.epsilon)) this.beginLock();
   }
 
   private beginLock(): void {
@@ -200,7 +233,7 @@ export class GameScene implements Scene {
 
   private enterWon(): void {
     this.phase = "won";
-    const key = String(this.cfg.level);
+    const key = this.cfg.id;
     const prev = this.saveData.progress.bestByLevel[key];
     if (prev === undefined || this.caught < prev) {
       this.saveData.progress.bestByLevel[key] = this.caught;
@@ -224,35 +257,84 @@ export class GameScene implements Scene {
     }
   }
 
-  /** Debug/verify autopilot: steer to catch only when it improves alignment. */
+  /**
+   * Debug/verify autopilot. Per drop, in order of preference:
+   * catch it if that helps alignment; weaponize a wrong catch when the
+   * drop's color is overgrown (shrink tiers); otherwise dodge via the
+   * widest gap; last resort, eat a harmless wrong catch.
+   */
   private autoSteer(): void {
     const d = this.drop;
     if (!d || (d.phase !== "forming" && d.phase !== "falling")) return;
     const c = d.colorIdx;
     const maxDev = (s: readonly number[]): number =>
       Math.max(...s.map((v, i) => Math.abs(v - this.targets[i]!)));
-    const improves = maxDev(applyCatch(this.shares, c, this.cfg.growth)) < maxDev(this.shares);
-    // one-step improvement alone stalls near the end (a good catch can push a
-    // sibling just past ε); still-under-target colors are always worth taking
-    const stillNeeded = this.targets[c]! - this.shares[c]! >= this.cfg.growth / 2;
+    const g = this.cfg.growth;
+    const improves = maxDev(applyCatch(this.shares, c, g)) < maxDev(this.shares);
+    const stillNeeded = this.targets[c]! - this.shares[c]! >= g / 2;
     if (improves || stillNeeded) {
-      this.wheel.theta = -Math.PI / 2 - this.cents[c]! * TAU;
-    } else {
-      // dodge: park the widest OTHER segment's center under the drop
-      let widest = c === 0 ? 1 : 0;
-      for (let i = 0; i < this.cfg.n; i++) {
-        if (i !== c && this.shares[i]! > this.shares[widest]!) widest = i;
-      }
-      this.wheel.theta = -Math.PI / 2 - this.cents[widest]! * TAU;
+      this.parkTurn(this.cents[c]!);
+      return;
     }
+    if (this.cfg.wrongCatch === "shrinkDrop" && this.shares[c]! - this.targets[c]! >= g / 2) {
+      this.parkWrong(c); // deliberate wrong catch shrinks the overgrown color
+      return;
+    }
+    const gap = this.widestGap();
+    if (gap !== null) this.parkTurn(gap);
+    else this.parkWrong(c);
+  }
+
+  private parkTurn(turn: number): void {
+    this.wheel.theta = -Math.PI / 2 - turn * TAU;
+  }
+
+  private parkWrong(dropColor: number): void {
+    let widest = dropColor === 0 ? 1 : 0;
+    for (let i = 0; i < this.n(); i++) {
+      if (i !== dropColor && this.shares[i]! > this.shares[widest]!) widest = i;
+    }
+    this.parkTurn(this.cents[widest]!);
+  }
+
+  /** Center of the widest dark-gap arc in the outer ring, or null if none. */
+  private widestGap(): number | null {
+    const ext = drawnExtents(idealExtents(this.cents, this.shares));
+    const edges = ext
+      .filter((e) => e.end > e.start)
+      .map((e) => ({ start: mod1(e.start), width: e.end - e.start }))
+      .sort((a, b) => a.start - b.start);
+    if (edges.length === 0) return null;
+    let best: { center: number; width: number } | null = null;
+    for (let i = 0; i < edges.length; i++) {
+      const cur = edges[i]!;
+      const next = edges[(i + 1) % edges.length]!;
+      const curEnd = cur.start + cur.width;
+      const nextStart = i + 1 < edges.length ? next.start : next.start + 1;
+      const gapW = nextStart - curEnd;
+      if (gapW > 0.015 && (best === null || gapW > best.width)) {
+        best = { center: mod1(curEnd + gapW / 2), width: gapW };
+      }
+    }
+    return best ? best.center : null;
+  }
+
+  /** Debug/verify only. */
+  setTheta(rad: number): void {
+    this.wheel.theta = rad;
   }
 
   debugState(): Record<string, unknown> {
     return {
-      level: this.cfg.level,
+      screen: "game",
+      id: this.cfg.id,
+      name: this.cfg.name,
+      wrongCatch: this.cfg.wrongCatch,
       phase: this.phase,
       targets: [...this.targets],
       shares: [...this.shares],
+      centers: [...this.cents],
+      widestGap: this.widestGap(),
       theta: this.wheel.theta,
       caught: this.caught,
       par: this.levelPar,
@@ -301,7 +383,7 @@ export class GameScene implements Scene {
     }
     // locking/won: segments click into their exact target extents one by one
     const out: Extent[] = [];
-    for (let i = 0; i < this.cfg.n; i++) {
+    for (let i = 0; i < this.n(); i++) {
       const from = this.lockStart[i] ?? { start: this.bounds[i]!, end: this.bounds[i + 1]! };
       const to = { start: this.bounds[i]!, end: this.bounds[i + 1]! };
       const t = clamp01((this.lockT - i * SNAP_PER_SEG) / SNAP_PER_SEG);
@@ -318,22 +400,20 @@ export class GameScene implements Scene {
     const { cx, cy, outerR, ringW } = L;
     const th = this.wheel.theta;
     const mergeT =
-      this.phase === "playing"
-        ? 0
-        : clamp01((this.lockT - this.cfg.n * SNAP_PER_SEG) / MERGE_S);
+      this.phase === "playing" ? 0 : clamp01((this.lockT - this.n() * SNAP_PER_SEG) / MERGE_S);
     const discR = outerR - ringW - Math.max(2, outerR * 0.035) * (1 - mergeT);
     const innerRingR = outerR - ringW;
 
     // ring background track
     ctx.beginPath();
     ctx.arc(cx, cy, outerR, 0, TAU);
-    ctx.arc(cx, cy, outerR - ringW, 0, TAU, true);
+    ctx.arc(cx, cy, innerRingR, 0, TAU, true);
     ctx.fillStyle = "#17171f";
     ctx.fill();
 
     // outer segments (current shares, center-anchored)
     const extents = this.currentExtents();
-    for (let i = 0; i < this.cfg.n; i++) {
+    for (let i = 0; i < this.n(); i++) {
       const e = extents[i]!;
       if (e.end - e.start <= 0) continue;
       const pulse = this.pulses[i]! * Math.max(2, outerR * 0.03);
@@ -349,7 +429,7 @@ export class GameScene implements Scene {
 
     // lock flash per just-snapped segment
     if (this.phase !== "playing") {
-      for (let i = 0; i < this.cfg.n; i++) {
+      for (let i = 0; i < this.n(); i++) {
         const since = this.lockT - (i + 1) * SNAP_PER_SEG;
         if (since > 0 && since < 0.15) {
           const a0 = th + this.bounds[i]! * TAU;
@@ -365,7 +445,7 @@ export class GameScene implements Scene {
 
     // inner disc: the target pie (merges outward at the end)
     const pieR = discR + (outerR - discR) * mergeT;
-    for (let i = 0; i < this.cfg.n; i++) {
+    for (let i = 0; i < this.n(); i++) {
       const a0 = th + this.bounds[i]! * TAU;
       const a1 = th + this.bounds[i + 1]! * TAU;
       ctx.beginPath();
@@ -459,16 +539,35 @@ export class GameScene implements Scene {
   }
 
   private drawHud(ctx: CanvasRenderingContext2D, L: Layout): void {
+    const fs = Math.max(13, L.h * 0.019);
     ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.font = `600 ${Math.max(13, L.h * 0.019)}px system-ui, sans-serif`;
+    ctx.font = `600 ${fs}px system-ui, sans-serif`;
     ctx.textAlign = "left";
-    ctx.fillText(strings.level(this.cfg.level), 16, L.h * 0.05);
+    ctx.fillText(this.cfg.name, 16, L.h * 0.05);
+    ctx.fillStyle = "rgba(255,255,255,0.45)";
+    ctx.fillText(this.cfg.label.toUpperCase(), 16, L.h * 0.05 + fs * 1.3);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.textAlign = "right";
     ctx.fillText(`${strings.drops(this.caught)} · ${strings.par(this.levelPar)}`, L.w - 16, L.h * 0.05);
-    const best = this.saveData.progress.bestByLevel[String(this.cfg.level)];
+    const best = this.saveData.progress.bestByLevel[this.cfg.id];
     if (best !== undefined) {
       ctx.fillStyle = "rgba(255,255,255,0.45)";
-      ctx.fillText(strings.best(best), L.w - 16, L.h * 0.05 + 20);
+      ctx.fillText(strings.best(best), L.w - 16, L.h * 0.05 + fs * 1.3);
+    }
+    // teaching hint until the first catch
+    if (this.cfg.hint && this.caught === 0 && this.phase === "playing") {
+      ctx.textAlign = "center";
+      ctx.fillStyle = "rgba(255,255,255,0.55)";
+      ctx.font = `500 ${Math.max(12, L.h * 0.016)}px system-ui, sans-serif`;
+      ctx.fillText(this.cfg.hint, L.cx, L.h * 0.93);
+    }
+    // rule-change banner
+    if (this.cfg.intro && this.age < INTRO_S && this.phase === "playing") {
+      const a = this.age < INTRO_S - 0.5 ? 1 : (INTRO_S - this.age) / 0.5;
+      ctx.textAlign = "center";
+      ctx.fillStyle = `rgba(255,255,255,${0.95 * a})`;
+      ctx.font = `800 ${Math.max(20, L.h * 0.03)}px system-ui, sans-serif`;
+      ctx.fillText(this.cfg.intro, L.cx, L.h * 0.22);
     }
   }
 
@@ -483,7 +582,11 @@ export class GameScene implements Scene {
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.fillText(strings.result(this.caught, this.levelPar), L.cx, L.h * 0.3 + 36);
     ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.fillText(strings.tapNext, L.cx, L.h * 0.3 + 68);
+    ctx.fillText(
+      this.cfg.sequence === null ? strings.tapNextBoard : strings.tapSelect,
+      L.cx,
+      L.h * 0.3 + 68,
+    );
   }
 }
 

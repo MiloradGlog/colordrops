@@ -1,127 +1,112 @@
-# ColorDrops — spec
+# ColorDrops — spec (v2: handcrafted-levels variation)
+
+Supersedes the v1 procedural spec on this branch. Source design doc: the
+user's "Circle Alignment Game" spec (2026-08-01). Engine and core mechanic
+carry over from v1 verified stages s1+s2.
 
 ## Type
 
-`arcade` (one verb: drag to rotate; score-chaser structure) with a puzzle win
-condition. Arcade reference owns the core loop; no fail state in MVP — the
-pressure is the score, not death.
+`arcade` core loop with a puzzle win condition, structured like Geometry
+Dash: handcrafted deterministic levels, all open from the start, score
+chased per level. No fail state (Sudoku model) — you finish, efficiently or
+not.
 
 ## Core loop
 
-A drop of a random color telegraphs at the top edge, forms, and falls down the
-screen's center line; you drag left/right to rotate the whole wheel so the
-matching-color outer segment sits at the wheel's top when the drop lands; a
-correct catch grows that color's outer share (and shrinks the others
-proportionally); align every outer share with the inner target pie within
-tolerance → the ring locks in, merges into one full circle, you win. Score =
-drops caught; fewer is better.
+A drop telegraphs at the top edge, condenses, and falls down the center
+line; you drag left/right to rotate the whole wheel (inner + outer are one
+rigid unit — rotation can NEVER fix a mismatch, only position a color under
+the drop); a correct catch grows that color's outer share toward its inner
+target; align every share within the level's tolerance → lock-in, the layers
+fuse, level complete. Score = drops caught (all catches count); lower wins.
 
-## The wheel (the one mechanic — from the user, do not reinvent)
+## The wheel (unchanged from v1)
 
-- **N colors** per level (4 at level 1).
-- **Inner disc**: the *target* — a pie chart with seeded-random shares
-  (min 8%, sum 100%), fixed for the level.
-- **Outer ring** (donut): the *current* state — same colors, each segment
-  **angularly centered on the center of its inner segment**. All start at
-  equal shares (100/N each). Because inner shares sum to 100%, when every
-  outer share equals its inner share, adjacent outer segments meet exactly at
-  the inner boundaries — the ring closes seamlessly. Mid-game, undersized
-  regions show dark ring gaps; oversized neighbors press against each other
-  (drawn split at the overlap midpoint, like liquid under pressure).
-- **Rotation**: one global angle θ applied to the whole wheel (inner + outer
-  rotate together, always in sync). Drag left/right anywhere on screen turns
-  it. That is the only player verb.
-- **Catching**: the drop lands at the wheel's top point (12 o'clock). The
-  outer segment whose *drawn* extent spans that world angle is the catcher.
-  - Matching color → that share grows by **G percentage points** (level knob,
-    4pp at level 1); every other share shrinks proportionally so the sum
-    stays 100.
-  - Wrong color → nothing happens to shares; drop splashes off.
-  - Dark gap at top → drop falls through, nothing happens.
-  Deliberately dodging unwanted drops is the core skill: overshooting a color
-  past its target means catching *other* colors to shrink it back.
-- **Win**: every |outer − target| ≤ **ε** (2.5pp at level 1, tightens with
-  level). Then the lock sequence plays and the level ends.
+- Inner disc: the target pie — FIXED per level (handcrafted, not random).
+- Outer ring: current shares, each segment angularly centered on its inner
+  twin; all start equal at 100/N. Undersized regions leave dark gaps;
+  oversized neighbors press together, split at the overlap midpoint.
+- One global rotation θ; drag anywhere, 1:1 at the rim, light inertia.
+- The ring always sums to 100%. Redistribution rule (decided, consistent
+  everywhere): **proportionally across all other segments** — visually the
+  whole ring breathes, and no neighbor gets singled out.
+
+## Catch economy
+
+The drop lands at 12 o'clock. Whatever drawn segment spans that angle
+absorbs it (absorption ripple); a dark gap lets it fall through behind the
+wheel — an untouched drop, the free dodge.
+
+- **Correct catch** (segment color == drop color): +G to that share,
+  everyone else shrinks proportionally.
+- **Wrong catch** — per-level rule, a progression curve (§ levels):
+  - `none` (teaching tier): absorbed, no share change.
+  - `shrinkDrop` (standard tier, the v1 default): the DROP's color shrinks
+    by G wherever it actually lives on the ring; others grow
+    proportionally. Decision rationale: this is the weaponizable variant —
+    skilled players deliberately wrong-catch to fix overshoot — chosen for
+    strategic depth over `shrinkSelf` (punish clumsiness), which stays
+    implemented as a level-design knob.
+- **Scoring**: EVERY absorbed drop counts, correct or wrong (decided per the
+  design doc's recommendation — wrong catches have stakes even in teaching
+  tiers). Gap fall-throughs don't count: dodging by gap is free but takes
+  precision; dodging by wrong-color catch costs a point (and in shrink
+  tiers, has physical consequences).
+- Tolerance ε: per-level knob, generous early, brutal late.
 
 ## Behaviors
 
-- `wheel` (player-controlled)
-  - when drag active → θ += drag delta (1:1 angular mapping, immediate,
-    same-frame; slight inertia on release, heavy damping)
-  - when win condition met → enter `locking` (input disabled)
-- `drop` (spawned by scheduler) — states: `telegraph → forming → falling →
-  (absorbed | splashed | missed)`
-  - telegraph: top screen edge tints with the drop's color
-  - forming: the tint gathers toward the top-center, bulges into a droplet
-    (surface-tension squash/stretch), detaches when full
-  - falling: gravity acceleration down the center line, slight wobble
-  - on contact with outer ring top point:
-    - color matches segment there → `absorbed`: ripple + segment grow pulse
-    - else → `splashed`: burst particles, no share change
-  - past the wheel uncaught → `missed`: falls offscreen, no penalty
-- `scheduler`
-  - every `interval` seconds (level knob) → pick next color (seeded RNG,
-    weighted toward colors still below target — 70/30 useful/noise), start
-    its telegraph
-  - never two drops in the air at once in MVP
-- `ring-segment` (per color)
-  - on absorb of own color → grow animation to new share
-  - on any other absorb → ease to shrunken share
-  - on lock → snap to exact target extent, mechanical "click" into place,
-    one segment after another (Iron Man suit lock), then ring and disc merge
-    into a single full pie + flash
+Unchanged from v1 except:
+- `scheduler` → `sequencer`: levels play a FIXED, looping drop sequence
+  (same colors, same order, same speeds, every attempt — leaderboard-pure
+  choreography). Endless mode keeps the seeded weighted randomizer.
+- `wrong catch` effect branch per the economy above.
+- `tutorial hint`: teaching levels render a one-line hint until the first
+  catch ("The rings turn together — grow colors by catching drops"); the
+  first shrink-tier level banners "Wrong catches now shrink!".
 
-## Relations
+## Relations, key elements & animations, look
 
-- drop —lands-on→ outer ring segment (top point test)
-- outer segment —grows/shrinks→ sibling segments (sum locked at 100)
-- outer segment —compares-to→ inner segment (win check, per color)
-- scheduler —spawns→ drop; wheel θ —positions→ all segments
+Unchanged from v1 (drop physics/juice remains the product: gravity,
+squash/stretch, surface-tension forming, ripple absorption, lock-snap →
+fuse). Additional UI element: level-select screen — card grid, every level
+open, difficulty label + personal best on each card.
 
-## Key elements & animations
+## Structure — Geometry Dash model
 
-| Entity | States (each = one animation) |
-|---|---|
-| drop | telegraph, forming, falling, absorbed (ripple), splashed, missed |
-| outer segment | idle, grow-pulse, shrink, lock-snap, merged |
-| inner disc | idle, merged |
-| wheel | rotating (continuous), locking (sequence) |
-| HUD | drop-counter tick, new-best celebration |
+Handcrafted levels in `src/game/levels.ts`, each fully deterministic:
+`{ id, name, difficulty label, targets[], sequence[] (loops), intervalS,
+gravityScale, epsilon, growth, wrongCatch, intro? }`.
 
-Drop motion must be mathematically honest: real gravity (integrated in the
-fixed-step sim), volume-preserving squash/stretch, drip-detach easing. The
-drop animation is the product — budget it in s2, not s4.
+Difficulty levers: color count (4 → 8 slivers), fall speed, drop interval,
+tolerance, wrong-catch rule, sequence nastiness (noise drops, overshoot
+traps: repeats of an already-satisfied color).
 
-## Look
+v1 ships 10 levels: 1–3 teaching (`none`), 4 introduces shrink with a
+banner, 5–10 ramp to Insane (8 colors, ε 1.5pp, fast). Labels GD-style:
+Easy / Normal / Hard / Harder / Insane.
 
-Dark near-black background with a soft radial vignette; vibrant, saturated,
-clearly distinct hues (red, amber, green, blue, purple, pink, teal, yellow —
-in that order as N grows); flat 2D with subtle glow on the active drop;
-liquid feel everywhere (ripples, wobble). Minimal HUD: level, drop count,
-best. One accent color: the *next drop's* color (the UI itself telegraphs).
+**Endless mode** (side mode, one card on select): random target pie +
+random weighted drops (the v1 generator), medium settings, new board each
+win; best per board tracked under id `endless`.
 
-## Structure
+## Scoring & fail state
 
-Levels, procedurally generated from a seed:
-- `N(level)`: 4 + floor((level−1)/3), capped at 8
-- `interval(level)`: 2.6s → 1.2s (log-ish decay)
-- `fallSpeed(level)`: gravity scales up ~8%/level, capped
-- `ε(level)`: 2.5pp → 1.5pp
-- `G(level)`: 4pp, shrinking slightly as N grows (G = 16/N)
-- Par shown per level ≈ ceil(Σ max(0, target−start) / G); rating = drops vs par.
-MVP: endless level chain with the curve above; 10 levels is a full session.
+Score = total catches this run; par (heuristic floor = ceil(Σ deficits /
+G)) shown for reference; best per level saved locally. No fail state ever.
+Post-v1: bonus-objective stars, leaderboards.
 
 ## Universals
 
-- Controls: MVP (drag anywhere = rotate; ArrowLeft/Right for desktop dev)
-- Save/profile: MVP (current level, best per level, settings; versioned blob)
-- Audio: s4 (catch blip pitch-ramped by streak, splash, lock clicks, win)
-- Ads: s4 slots stubbed (no-op in browser)
-- Multiplayer/co-op: never
-- Localization: strings table from day one, English only
+Controls / save / audio / ads / localization: as v1. Multiplayer never.
+Leaderboards are post-v1 (until then, best-per-level is local).
 
 ## Monetization
 
-Ads model: interstitial after every 3rd completed level (never before first
-play, never mid-fall); rewarded (post-MVP): "ghost guides" — briefly show the
-target boundaries projected onto the ring.
+As v1: interstitial slot after every 3rd level completion; rewarded slot
+reserved for "ghost guides" hint. Slots stubbed in browser.
+
+## Post-v1 (explicitly out of scope now)
+
+Hue-shift "Painter mode" (wrong catches drift hue; loud visual warning;
+win-by-size decision pending), leaderboards, stars, Capacitor wrap.

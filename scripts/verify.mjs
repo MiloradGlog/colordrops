@@ -1,5 +1,5 @@
-// Headless verify for gimmegame/progress.json stages s1 + s2.
-// Usage: npm run build && npm run verify  (needs `vite preview` free on :4173)
+// Headless verify for gimmegame/progress.json (v2 handcrafted-levels).
+// Usage: npm run build && npm run verify  (needs :4173 free)
 // Drives the real page in Chromium via the __cd debug hooks; every assertion
 // maps to a `verify` line in progress.json.
 
@@ -29,12 +29,21 @@ try {
   await page.goto(URL);
   await page.waitForFunction(() => typeof window.__cd?.state === "function");
 
-  // — s1: loop —
-  await page.waitForTimeout(400);
-  const s0 = await page.evaluate(() => window.__cd.state());
-  assert(s0.phase === "playing", "s1/loop: game boots into playing phase");
+  // — boot: level select —
+  await page.waitForTimeout(300);
+  assert(
+    (await page.evaluate(() => window.__cd.state())).screen === "select",
+    "s4/select-flow: game boots into level select",
+  );
+  await page.screenshot({ path: "scripts/screenshot-select.png" });
 
-  // — s1: input — drag rotates same-frame; arrows rotate on desktop
+  // — tapping the first card starts l1 —
+  await page.mouse.click(100, 170);
+  await page.waitForTimeout(120);
+  const afterTap = await page.evaluate(() => window.__cd.state());
+  assert(afterTap.screen === "game" && afterTap.id === "l1", "s4/select-flow: tap card starts l1");
+
+  // — s1 input: drag rotates; arrows rotate the other way —
   const t0 = (await page.evaluate(() => window.__cd.state())).theta;
   await page.mouse.move(195, 500);
   await page.mouse.down();
@@ -50,65 +59,147 @@ try {
   await page.keyboard.up("ArrowLeft");
   const t2 = (await page.evaluate(() => window.__cd.state())).theta;
   assert(t2 < t1b - 0.05, "s1/input: ArrowLeft rotates the other way");
+  await page.screenshot({ path: "scripts/screenshot-l1.png" });
 
-  // — s1: wheel renders — screenshot has wheel pixels (non-background colors)
-  await page.screenshot({ path: "scripts/screenshot-s1.png" });
-  assert(true, "s1/wheel-render: screenshot captured (visual check: scripts/screenshot-s1.png)");
-
-  // — s2: target-gen — deterministic, min share, sums to 1
-  const gen = await page.evaluate(() => ({
-    a: window.__cd.pure.genTargets(42, 5, 0.08),
-    b: window.__cd.pure.genTargets(42, 5, 0.08),
-    c: window.__cd.pure.genTargets(43, 5, 0.08),
-  }));
-  assert(JSON.stringify(gen.a) === JSON.stringify(gen.b), "s2/target-gen: same seed → same targets");
-  assert(JSON.stringify(gen.a) !== JSON.stringify(gen.c), "s2/target-gen: different seed differs");
-  const sum = gen.a.reduce((x, y) => x + y, 0);
-  assert(Math.abs(sum - 1) < 1e-9, "s2/target-gen: shares sum to 1");
-  assert(Math.min(...gen.a) >= 0.08 - 1e-9, "s2/target-gen: min share respected");
-
-  // — s2: catch-rules — grow by G, others shrink proportionally, sum stays 1
-  const catchRes = await page.evaluate(() => {
-    const before = [0.25, 0.25, 0.25, 0.25];
-    const after = window.__cd.pure.applyCatch(before, 2, 0.04);
-    return { before, after, sum: after.reduce((x, y) => x + y, 0) };
+  // — s3 rules: pure catch economy —
+  const rules = await page.evaluate(() => {
+    const grow = window.__cd.pure.applyCatch([0.25, 0.25, 0.25, 0.25], 2, 0.04);
+    const shrink = window.__cd.pure.applyShrink([0.25, 0.25, 0.25, 0.25], 2, 0.04);
+    return { grow, shrink, gSum: grow.reduce((a, b) => a + b, 0), sSum: shrink.reduce((a, b) => a + b, 0) };
   });
-  assert(Math.abs(catchRes.after[2] - 0.29) < 1e-9, "s2/catch-rules: caught color grows by G");
-  assert(Math.abs(catchRes.sum - 1) < 1e-9, "s2/catch-rules: pie still sums to 1");
+  assert(Math.abs(rules.grow[2] - 0.29) < 1e-9, "s2/catch-grow: caught color grows by G");
+  assert(Math.abs(rules.gSum - 1) < 1e-9, "s2/catch-grow: pie sums to 1");
+  assert(Math.abs(rules.shrink[2] - 0.21) < 1e-9, "s3/wrong-catch: applyShrink shrinks by G");
   assert(
-    Math.abs(catchRes.after[0] - catchRes.after[1]) < 1e-12,
-    "s2/catch-rules: others shrink proportionally",
+    Math.abs(rules.sSum - 1) < 1e-9 && Math.abs(rules.shrink[0] - rules.shrink[1]) < 1e-12,
+    "s3/wrong-catch: others grow proportionally, sum stays 1",
   );
 
-  // — s2: drop-lifecycle + win-lock — autopilot plays the level to the lock
-  const result = await page.evaluate(() => {
-    window.__cd.auto(true);
-    const seen = new Set();
-    let won = null;
-    for (let i = 0; i < 600 * 60; i++) {
+  // — s3 rules: wrong catch COUNTS but has no effect on a teaching level —
+  const wrongOnL1 = await page.evaluate(() => {
+    window.__cd.goto("l1"); // fresh l1; first drop color is 0 (fixed sequence)
+    const st0 = window.__cd.state();
+    // park color 1's center under the drop → guaranteed wrong catch
+    window.__cd.theta(-Math.PI / 2 - st0.centers[1] * Math.PI * 2);
+    let st = st0;
+    for (let i = 0; i < 60 * 20 && st.caught === st0.caught && st.phase === "playing"; i++) {
       window.__cd.ff(1 / 60);
-      const st = window.__cd.state();
-      if (st.drop) seen.add(st.drop.phase);
-      if (st.phase !== "playing") {
-        // fast-forward through the lock animation too
-        window.__cd.ff(5);
-        won = window.__cd.state();
-        break;
-      }
+      st = window.__cd.state();
+      window.__cd.theta(-Math.PI / 2 - st.centers[1] * Math.PI * 2); // keep parked
     }
-    window.__cd.auto(false);
-    return { seen: [...seen], won };
+    return { before: st0.shares, after: st.shares, caught: st.caught };
+  });
+  assert(wrongOnL1.caught === 1, "s3/all-catch-score: wrong catch increments the counter");
+  assert(
+    JSON.stringify(wrongOnL1.before) === JSON.stringify(wrongOnL1.after),
+    "s3/wrong-catch: 'none' tier leaves shares untouched",
+  );
+
+  // — s3 rules: gap fall-through is free —
+  const gapRun = await page.evaluate(() => {
+    window.__cd.goto("l4"); // shrink tier; gaps exist while misaligned
+    let st = window.__cd.state();
+    const parkGap = () => {
+      st = window.__cd.state();
+      if (st.widestGap !== null) window.__cd.theta(-Math.PI / 2 - st.widestGap * Math.PI * 2);
+    };
+    parkGap();
+    for (let i = 0; i < 60 * 12; i++) {
+      window.__cd.ff(1 / 60);
+      parkGap();
+    }
+    return window.__cd.state();
+  });
+  assert(gapRun.caught === 0, "s3/all-catch-score: gap fall-through does not count");
+  await page.screenshot({ path: "scripts/screenshot-l4.png" });
+
+  // — s4: determinism — same level, same drop sequence, every attempt —
+  const seq = await page.evaluate(() => {
+    const collect = () => {
+      window.__cd.goto("l3");
+      const seen = [];
+      let prevPhase = null;
+      for (let i = 0; i < 60 * 30 && seen.length < 6; i++) {
+        window.__cd.ff(1 / 60);
+        const d = window.__cd.state().drop;
+        if (d && d.phase === "telegraph" && prevPhase !== "telegraph") seen.push(d.color);
+        prevPhase = d ? d.phase : null;
+      }
+      return seen;
+    };
+    return { a: collect(), b: collect() };
   });
   assert(
-    ["telegraph", "forming", "falling"].every((p) => result.seen.includes(p)),
-    `s2/drop-lifecycle: full lifecycle observed (${result.seen.join(", ")})`,
+    seq.a.length >= 5 && JSON.stringify(seq.a) === JSON.stringify(seq.b),
+    `s4/level-data: replay produces the identical drop sequence (${seq.a.join(",")})`,
   );
-  assert(result.won && result.won.phase === "won", "s2/win-lock: autopilot reaches the locked win");
-  assert(result.won.caught >= result.won.par, "s2/win-lock: caught ≥ par (par is a true floor)");
-  console.log(
-    `   autopilot won level ${result.won.level} in ${result.won.caught} drops (par ${result.won.par})`,
+
+  // — s4: ALL 10 levels winnable by autopilot —
+  for (let i = 1; i <= 10; i++) {
+    const res = await page.evaluate((id) => {
+      window.__cd.goto(id);
+      window.__cd.auto(true);
+      let st = window.__cd.state();
+      for (let s = 0; s < 900 && st.phase === "playing"; s++) {
+        window.__cd.ff(1);
+        st = window.__cd.state();
+      }
+      window.__cd.ff(5); // lock animation
+      window.__cd.auto(false);
+      return window.__cd.state();
+    }, `l${i}`);
+    assert(res.phase === "won", `s4/level-data: autopilot clears l${i} (${res.caught} drops, par ${res.par})`);
+  }
+
+  // — s4: won → tap → back to select; best persisted —
+  const backOut = await page.evaluate(() => {
+    window.__cd.goto("l1");
+    window.__cd.auto(true);
+    let st = window.__cd.state();
+    for (let s = 0; s < 300 && st.phase === "playing"; s++) {
+      window.__cd.ff(1);
+      st = window.__cd.state();
+    }
+    window.__cd.ff(5);
+    window.__cd.auto(false);
+    return window.__cd.state().phase;
+  });
+  assert(backOut === "won", "s4/select-flow: l1 rewon for navigation test");
+  await page.mouse.click(195, 500);
+  await page.waitForTimeout(150);
+  assert(
+    (await page.evaluate(() => window.__cd.state())).screen === "select",
+    "s4/select-flow: tap on won screen returns to level select",
   );
-  await page.screenshot({ path: "scripts/screenshot-won.png" });
+  await page.reload();
+  await page.waitForFunction(() => typeof window.__cd?.state === "function");
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("colordrops-save")));
+  assert(
+    typeof saved?.progress?.bestByLevel?.l1 === "number",
+    `s4/select-flow: best persists across reload (l1 best ${saved?.progress?.bestByLevel?.l1})`,
+  );
+
+  // — s5: endless — autopilot wins a random board, tap starts a new one —
+  const endless = await page.evaluate(() => {
+    window.__cd.goto("endless");
+    window.__cd.auto(true);
+    let st = window.__cd.state();
+    for (let s = 0; s < 900 && st.phase === "playing"; s++) {
+      window.__cd.ff(1);
+      st = window.__cd.state();
+    }
+    window.__cd.ff(5);
+    window.__cd.auto(false);
+    return window.__cd.state();
+  });
+  assert(endless.phase === "won", `s5/endless: autopilot wins a random board (${endless.caught} drops)`);
+  await page.mouse.click(195, 500);
+  await page.waitForTimeout(150);
+  const nextBoard = await page.evaluate(() => window.__cd.state());
+  assert(
+    nextBoard.phase === "playing" && nextBoard.caught === 0 && /board 2/.test(nextBoard.name),
+    "s5/endless: tap after win starts a fresh board",
+  );
 
   assert(errors.length === 0, `no console errors (got: ${errors.join(" | ")})`);
   await browser.close();

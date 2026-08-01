@@ -1,10 +1,11 @@
 {
   "game": "colordrops",
+  "variant": "v2-handcrafted-levels",
   "autoloop": false,
   "stages": [
     {
       "id": "s1-skeleton",
-      "title": "Engine skeleton: loop, scenes, input, wheel rendering",
+      "title": "Engine skeleton: loop, scenes, input, wheel rendering (inherited from v1)",
       "items": [
         {
           "id": "loop",
@@ -28,14 +29,8 @@
     },
     {
       "id": "s2-mechanic",
-      "title": "Core mechanic playable: drops, catching, alignment win",
+      "title": "Core mechanic: drops, catching, alignment win (inherited from v1)",
       "items": [
-        {
-          "id": "target-gen",
-          "title": "Seeded target pie generation (min share 8%, sum 100)",
-          "done": true,
-          "verify": "same seed reproduces same targets; shares sum to 100 within 1e-9"
-        },
         {
           "id": "drop-lifecycle",
           "title": "Drop telegraph → forming → falling → absorbed/splashed/missed with honest gravity + squash/stretch",
@@ -43,47 +38,77 @@
           "verify": "headless run observes full lifecycle; drop lands on center line at wheel top"
         },
         {
-          "id": "catch-rules",
-          "title": "Catch grows share by G, shrinks others proportionally; wrong color / gap does nothing",
+          "id": "catch-grow",
+          "title": "Correct catch grows share by G, shrinks others proportionally",
           "done": true,
-          "verify": "scripted sim: catch red → red +G, sum stays 100; wrong-color catch changes nothing"
+          "verify": "scripted sim: catch red → red +G, sum stays 1; others shrink proportionally"
         },
         {
           "id": "win-lock",
           "title": "Tolerance win check + lock-snap sequence into merged full pie",
           "done": true,
-          "verify": "autopilot debug hook plays to alignment; lock state reached, input disabled, win shown with drop count"
+          "verify": "autopilot plays to alignment; lock reached, input disabled, win shown with drop count"
         }
       ]
     },
     {
-      "id": "s3-content",
-      "title": "Levels, difficulty curve, score/par, persistence",
+      "id": "s3-rules",
+      "title": "v2 catch economy: wrong-catch variants + all-catch scoring",
       "items": [
         {
-          "id": "levels",
-          "title": "Level chain with N/interval/fallSpeed/ε/G curves from spec",
-          "done": false,
-          "verify": "level 4 spawns 5 colors; interval and gravity match curve values"
+          "id": "wrong-catch",
+          "title": "wrongCatch knob none|shrinkDrop|shrinkSelf; shrinkDrop shrinks the drop's color, others grow proportionally",
+          "done": true,
+          "verify": "scripted sim: shrinkDrop wrong catch → drop color −G, sum stays 1; none → shares unchanged"
         },
         {
-          "id": "score",
-          "title": "Drop counter, par calculation, best-per-level saved",
-          "done": false,
-          "verify": "beat a level twice; lower count persists as best after reload"
+          "id": "all-catch-score",
+          "title": "Score counts every absorbed drop (correct AND wrong); gap fall-through free",
+          "done": true,
+          "verify": "headless: wrong catch increments counter; gap fall-through does not"
         }
       ]
     },
     {
-      "id": "s4-shell",
-      "title": "Title/results screens, audio, ads slots, polish",
+      "id": "s4-levels",
+      "title": "Handcrafted deterministic levels + select screen",
       "items": [
         {
-          "id": "shell",
-          "title": "boot → title → game (HUD) → results scene flow, safe-area aware",
-          "done": false,
-          "verify": "full flow navigable by touch on phone-sized viewport"
+          "id": "level-data",
+          "title": "10 authored levels: fixed targets + fixed looping drop sequences, difficulty labels, teaching→shrink curve",
+          "done": true,
+          "verify": "same level replayed → identical drop sequence; autopilot clears ALL 10 levels headlessly"
         },
+        {
+          "id": "select-flow",
+          "title": "Level select (all open, label + best per card) → game → won → back to select",
+          "done": true,
+          "verify": "headless taps navigate select → level → win → select; best persists"
+        },
+        {
+          "id": "tutorial-hints",
+          "title": "Teaching-level hint line + 'wrong catches now shrink!' banner on first shrink level",
+          "done": true,
+          "verify": "level 1 shows hint until first catch; level 4 shows shrink banner at start"
+        }
+      ]
+    },
+    {
+      "id": "s5-endless",
+      "title": "Endless randomized side mode",
+      "items": [
+        {
+          "id": "endless",
+          "title": "Endless card: random board + weighted random drops, new board each win, best tracked",
+          "done": true,
+          "verify": "headless: endless reachable from select; autopilot wins a board; a new board starts"
+        }
+      ]
+    },
+    {
+      "id": "s6-shell",
+      "title": "Audio, ads slots, ship polish (post-core)",
+      "items": [
         {
           "id": "audio",
           "title": "WebAudio mixer: catch/splash/lock/win sfx, mute persisted",
@@ -92,21 +117,9 @@
         },
         {
           "id": "ads",
-          "title": "Interstitial slot after every 3rd level (no-op stub in browser)",
+          "title": "Interstitial slot after every 3rd level completion (no-op stub in browser)",
           "done": false,
-          "verify": "stub logs interstitial exactly at levels 3, 6, 9"
-        }
-      ]
-    },
-    {
-      "id": "s5-ship",
-      "title": "Capacitor wrap, icons, store checklist",
-      "items": [
-        {
-          "id": "wrap",
-          "title": "Capacitor Android/iOS project, Preferences-backed save",
-          "done": false,
-          "verify": "app runs on device/emulator; save survives app restart"
+          "verify": "stub logs interstitial exactly on 3rd, 6th, 9th completion"
         }
       ]
     }
@@ -114,8 +127,9 @@
   "mvp": [
     "s1-skeleton",
     "s2-mechanic",
-    "s3-content",
-    "s4-shell"
+    "s3-rules",
+    "s4-levels",
+    "s5-endless"
   ],
-  "done_definition": "All MVP stages verified; playable start-to-finish on a phone-sized viewport; bundle < 5 MB; no console errors."
+  "done_definition": "All MVP stages verified; all 10 levels + endless playable start-to-finish on a phone-sized viewport; bundle < 5 MB; no console errors."
 }

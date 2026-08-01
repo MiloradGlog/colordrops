@@ -10,6 +10,15 @@ grows that color's ring segment (and shrinks the rest). Match every ring
 segment to its target and the ring **locks** into place, merging into one
 full circle. Fewer drops caught = better score.
 
+This branch is the **handcrafted-levels variation** (Geometry Dash model):
+10 authored levels with fixed target pies and fixed, looping drop sequences —
+the same puzzle for everyone, so the fewest-drops score is pure skill. All
+levels are open from the start with difficulty labels (Easy → Insane). Early
+levels are a teaching tier where wrong catches only cost score; from "Now It
+Shrinks" onward a wrong catch shrinks the drop's own color — which skilled
+players can weaponize to fix overshoot. Dodging by parking a dark gap under
+a drop is free. Endless mode (random boards) is the casual side mode.
+
 Built with the [gimmegame](https://github.com/miloradglog/gimmegame) plugin:
 spec in `gimmegame/spec.md`, build state in `gimmegame/progress.json`.
 
