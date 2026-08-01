@@ -5,7 +5,9 @@
 import type { Scene } from "../../engine/scene";
 import type { Input } from "../../engine/input";
 import type { SaveData } from "../../engine/save";
+import type { Audio } from "../../engine/audio";
 import { save } from "../../engine/save";
+import { ads } from "../../engine/ads";
 import { Rng } from "../../engine/rng";
 import { PALETTE, par } from "../config";
 import {
@@ -82,11 +84,18 @@ export class GameScene implements Scene {
   private fxRng = new Rng(0xfeedface); // presentation-only randomness, still seeded
   private tapStart: { x: number; y: number } | null = null;
   private newBest = false;
+  private streak = 0;
+  private hitStop = 0;
+  private shake = 0;
+  private trail: { y: number; age: number }[] = [];
+  private lockClicks = 0;
+  private chordPlayed = false;
 
   constructor(
     private input: Input,
     private canvas: HTMLCanvasElement,
     private saveData: SaveData,
+    private audio: Audio,
     cfg: RunConfig,
     private onExit: () => void,
   ) {
@@ -118,6 +127,12 @@ export class GameScene implements Scene {
     this.pulses = new Array(n).fill(0);
     this.ripples = [];
     this.particles = [];
+    this.streak = 0;
+    this.hitStop = 0;
+    this.shake = 0;
+    this.trail = [];
+    this.lockClicks = 0;
+    this.chordPlayed = false;
   }
 
   private n(): number {
@@ -128,6 +143,10 @@ export class GameScene implements Scene {
     const L = this.layout();
     this.wheel.radius = L.outerR;
     this.age += dt;
+    // hit-stop: the world freezes for a beat on a correct catch; effects keep moving
+    const wdt = this.hitStop > 0 ? 0 : dt;
+    this.hitStop = Math.max(0, this.hitStop - dt);
+    this.shake = Math.max(0, this.shake - dt * 3.5);
 
     if (this.phase === "playing") {
       // back chip: a clean tap (not a drag) on the top-left chip exits
@@ -146,9 +165,20 @@ export class GameScene implements Scene {
       }
       if (this.autopilot) this.autoSteer();
       rotate.tick(this.wheel, dt);
-      this.updateSpawning(dt, L);
+      this.updateSpawning(wdt, L);
+      if (this.drop?.phase === "falling") {
+        this.trail.push({ y: this.drop.y, age: 0 });
+      }
+      for (const t of this.trail) t.age += dt;
+      this.trail = this.trail.filter((t) => t.age < 0.16);
     } else if (this.phase === "locking") {
       this.lockT += dt;
+      const due = Math.min(this.n(), Math.floor(this.lockT / SNAP_PER_SEG));
+      while (this.lockClicks < due) this.audio.click(this.lockClicks++);
+      if (!this.chordPlayed && this.lockT >= this.n() * SNAP_PER_SEG) {
+        this.chordPlayed = true;
+        this.audio.chord();
+      }
       if (this.lockT >= this.n() * SNAP_PER_SEG + MERGE_S) this.enterWon();
     } else if (this.phase === "won") {
       if (this.input.pointer.justPressed) {
@@ -226,14 +256,26 @@ export class GameScene implements Scene {
     if (idx === d.colorIdx) {
       this.shares = applyCatch(this.shares, idx, this.cfg.growth);
       this.pulses[idx] = 1;
+      this.streak++;
+      this.audio.blip(this.streak);
+      this.hitStop = 0.05;
     } else if (this.cfg.wrongCatch === "shrinkDrop") {
       this.shares = applyShrink(this.shares, d.colorIdx, this.cfg.growth);
       this.spawnSplash(d, L); // shrink is loud: burst in the shrinking color
+      this.streak = 0;
+      this.audio.thud();
+      this.shake = 1;
     } else if (this.cfg.wrongCatch === "shrinkSelf") {
       this.shares = applyShrink(this.shares, idx, this.cfg.growth);
       this.spawnSplash(d, L);
+      this.streak = 0;
+      this.audio.thud();
+      this.shake = 1;
+    } else {
+      // wrongCatch "none": absorbed, counted, no physical effect
+      this.streak = 0;
+      this.audio.plop();
     }
-    // wrongCatch "none": absorbed, counted, no physical effect
 
     if (isAligned(this.shares, this.targets, this.cfg.epsilon)) this.beginLock();
   }
@@ -254,6 +296,12 @@ export class GameScene implements Scene {
     this.newBest = prev !== undefined && this.caught < prev;
     if (prev === undefined || this.caught < prev) {
       this.saveData.progress.bestByLevel[key] = this.caught;
+    }
+    if (this.cfg.sequence !== null) {
+      // interstitial slot at a natural break, every 3rd level completion
+      const done = (this.saveData.progress.completions ?? 0) + 1;
+      this.saveData.progress.completions = done;
+      if (done % 3 === 0) void ads.interstitial();
     }
     save(this.saveData);
   }
@@ -378,14 +426,33 @@ export class GameScene implements Scene {
 
   render(ctx: CanvasRenderingContext2D): void {
     const L = this.layout();
+    ctx.save();
+    if (this.shake > 0) {
+      const m = this.shake * this.shake * 5;
+      ctx.translate((this.fxRng.next() - 0.5) * m, (this.fxRng.next() - 0.5) * m);
+    }
     this.drawBackground(ctx, L);
     for (const d of this.fallthrough) this.drawDropShape(ctx, L, d, 0.35);
     this.drawWheel(ctx, L);
     this.drawRipples(ctx, L);
+    this.drawTrail(ctx, L);
     if (this.drop) this.drawDrop(ctx, L, this.drop);
     this.drawParticles(ctx);
     this.drawHud(ctx, L);
     if (this.phase === "won") this.drawWon(ctx, L);
+    ctx.restore();
+  }
+
+  private drawTrail(ctx: CanvasRenderingContext2D, L: Layout): void {
+    if (!this.drop || this.drop.phase !== "falling") return;
+    const color = PALETTE[this.drop.colorIdx % PALETTE.length]!;
+    for (const t of this.trail) {
+      const a = 1 - t.age / 0.16;
+      ctx.beginPath();
+      ctx.arc(L.cx, t.y, this.drop.r * 0.55 * a, 0, TAU);
+      ctx.fillStyle = hexA(color, a * 0.25);
+      ctx.fill();
+    }
   }
 
   private drawBackground(ctx: CanvasRenderingContext2D, L: Layout): void {
@@ -638,14 +705,18 @@ export class GameScene implements Scene {
   private drawWon(ctx: CanvasRenderingContext2D, L: Layout): void {
     ctx.fillStyle = "rgba(11,11,16,0.55)";
     ctx.fillRect(0, 0, L.w, L.h);
+    // center the text block in the space above the wheel — short viewports
+    // must not overlap the pie
+    const wheelTop = L.cy - L.outerR;
+    const base = Math.max(70, wheelTop * 0.36);
     ctx.textAlign = "center";
     ctx.fillStyle = "#fff";
     ctx.font = `800 ${Math.max(28, L.h * 0.05)}px system-ui, sans-serif`;
-    ctx.fillText(strings.locked, L.cx, L.h * 0.3);
+    ctx.fillText(strings.locked, L.cx, base);
     ctx.font = `500 ${Math.max(16, L.h * 0.024)}px system-ui, sans-serif`;
     ctx.fillStyle = "rgba(255,255,255,0.85)";
-    ctx.fillText(strings.result(this.caught, this.levelPar), L.cx, L.h * 0.3 + 36);
-    let y = L.h * 0.3 + 68;
+    ctx.fillText(strings.result(this.caught, this.levelPar), L.cx, base + 36);
+    let y = base + 68;
     if (this.newBest) {
       const wob = 1 + Math.sin(this.age * 6) * 0.06;
       ctx.save();

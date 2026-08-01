@@ -112,13 +112,13 @@
         {
           "id": "audio",
           "title": "WebAudio mixer: catch/splash/lock/win sfx, mute persisted",
-          "done": false,
+          "done": true,
           "verify": "sfx audible after first gesture; mute survives reload"
         },
         {
           "id": "ads",
           "title": "Interstitial slot after every 3rd level completion (no-op stub in browser)",
-          "done": false,
+          "done": true,
           "verify": "stub logs interstitial exactly on 3rd, 6th, 9th completion"
         }
       ]

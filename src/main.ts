@@ -2,6 +2,7 @@ import { startLoop } from "./engine/loop";
 import { SceneStack } from "./engine/scene";
 import { Input } from "./engine/input";
 import { load, installAutoSave } from "./engine/save";
+import { Audio } from "./engine/audio";
 import { GameScene } from "./game/scenes/game";
 import { SelectScene } from "./game/scenes/select";
 import { LEVELS, endlessConfig, type RunConfig } from "./game/levels";
@@ -14,17 +15,19 @@ const input = new Input(canvas);
 const scenes = new SceneStack();
 const saveData = load();
 installAutoSave(() => saveData);
+const audio = new Audio();
+audio.muted = !saveData.settings.sound;
 
 let current: GameScene | null = null;
 let autopilotWanted = false;
 
 function showSelect(): void {
   current = null;
-  scenes.replace(new SelectScene(input, canvas, saveData, startRun));
+  scenes.replace(new SelectScene(input, canvas, saveData, audio, startRun));
 }
 
 function startRun(cfg: RunConfig): void {
-  current = new GameScene(input, canvas, saveData, cfg, showSelect);
+  current = new GameScene(input, canvas, saveData, audio, cfg, showSelect);
   current.autopilot = autopilotWanted;
   scenes.replace(current);
 }

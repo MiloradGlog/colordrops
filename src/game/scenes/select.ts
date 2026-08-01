@@ -4,6 +4,8 @@
 import type { Scene } from "../../engine/scene";
 import type { Input } from "../../engine/input";
 import type { SaveData } from "../../engine/save";
+import type { Audio } from "../../engine/audio";
+import { save } from "../../engine/save";
 import { PALETTE } from "../config";
 import { LEVELS, endlessConfig, type RunConfig } from "../levels";
 import { strings } from "../../ui/strings";
@@ -30,12 +32,25 @@ export class SelectScene implements Scene {
     private input: Input,
     private canvas: HTMLCanvasElement,
     private saveData: SaveData,
+    private audio: Audio,
     private pick: (cfg: RunConfig) => void,
   ) {}
+
+  private soundChip(): { x: number; y: number; r: number } {
+    return { x: this.canvas.clientWidth - 34, y: 34, r: 18 };
+  }
 
   update(): void {
     if (this.input.pointer.justReleased) {
       const { x, y } = this.input.pointer;
+      const s = this.soundChip();
+      if (Math.hypot(x - s.x, y - s.y) < s.r + 8) {
+        this.saveData.settings.sound = !this.saveData.settings.sound;
+        this.audio.muted = !this.saveData.settings.sound;
+        save(this.saveData);
+        this.input.endTick();
+        return;
+      }
       for (const c of this.cards()) {
         if (x >= c.x && x <= c.x + c.w && y >= c.y && y <= c.y + c.h) {
           this.pick(c.cfg);
@@ -150,6 +165,19 @@ export class SelectScene implements Scene {
     ctx.fillStyle = "rgba(255,255,255,0.4)";
     ctx.font = `500 ${Math.max(11, h * 0.014)}px system-ui, sans-serif`;
     ctx.fillText(strings.tagline, w / 2, h * 0.965);
+
+    // sound toggle
+    const s = this.soundChip();
+    ctx.beginPath();
+    ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.3)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.font = `${s.r}px system-ui, sans-serif`;
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillText(this.saveData.settings.sound ? "🔊" : "🔇", s.x, s.y + s.r * 0.36);
   }
 }
 

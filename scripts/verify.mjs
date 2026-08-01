@@ -24,8 +24,12 @@ try {
   });
   const page = await browser.newPage({ viewport: { width: 390, height: 844 } });
   const errors = [];
+  const debugLogs = [];
   page.on("pageerror", (e) => errors.push(String(e)));
-  page.on("console", (m) => m.type() === "error" && errors.push(m.text()));
+  page.on("console", (m) => {
+    if (m.type() === "error") errors.push(m.text());
+    if (m.type() === "debug") debugLogs.push(m.text());
+  });
   await page.goto(URL);
   await page.waitForFunction(() => typeof window.__cd?.state === "function");
 
@@ -200,6 +204,28 @@ try {
     nextBoard.phase === "playing" && nextBoard.caught === 0 && /board 2/.test(nextBoard.name),
     "s5/endless: tap after win starts a fresh board",
   );
+
+  // — s6: ads stub fires exactly on every 3rd LEVEL completion —
+  // this run completed 11 levels (10 in the sweep + the nav re-win) plus an
+  // endless board (which must not count) → interstitials at 3, 6, 9 = 3 logs
+  const adLogs = debugLogs.filter((t) => t.includes("[ads] interstitial"));
+  assert(adLogs.length === 3, `s6/ads: interstitial fired 3 times in 11 completions (got ${adLogs.length})`);
+
+  // — s6: mute toggle persists —
+  await page.evaluate(() => window.__cd.goto("select"));
+  await page.waitForTimeout(150);
+  await page.mouse.click(390 - 34, 34);
+  await page.waitForTimeout(150);
+  const soundOff = await page.evaluate(
+    () => JSON.parse(localStorage.getItem("colordrops-save")).settings.sound,
+  );
+  assert(soundOff === false, "s6/audio: sound chip toggles and persists mute");
+  await page.reload();
+  await page.waitForFunction(() => typeof window.__cd?.state === "function");
+  const soundStill = await page.evaluate(
+    () => JSON.parse(localStorage.getItem("colordrops-save")).settings.sound,
+  );
+  assert(soundStill === false, "s6/audio: mute survives reload");
 
   assert(errors.length === 0, `no console errors (got: ${errors.join(" | ")})`);
   await browser.close();

@@ -1,49 +1,63 @@
-// Universal audio: WebAudio mixer, decode-on-first-gesture (mobile autoplay
-// rules), sfx pool + optional music channel. Same API in every game.
+// Universal audio, ColorDrops flavor: a tiny procedural WebAudio synth —
+// zero asset files, every sfx generated. Context unlocks on first gesture
+// (mobile autoplay rules); mute persists via save settings.
 
 export class Audio {
   private ctx: AudioContext | null = null;
-  private buffers = new Map<string, AudioBuffer>();
-  private pending = new Map<string, string>(); // name → url, until unlocked
   muted = false;
 
   constructor() {
-    const unlock = () => {
-      if (this.ctx) return;
-      this.ctx = new AudioContext();
-      for (const [name, url] of this.pending) void this.decode(name, url);
-      this.pending.clear();
+    const unlock = (): void => {
+      if (!this.ctx) this.ctx = new AudioContext();
     };
     window.addEventListener("pointerdown", unlock, { once: true });
   }
 
-  register(name: string, url: string): void {
-    if (this.ctx) void this.decode(name, url);
-    else this.pending.set(name, url);
-  }
-
-  play(name: string, opts: { pitchVar?: number; gain?: number } = {}): void {
+  private tone(
+    freq: number,
+    dur: number,
+    type: OscillatorType,
+    gain: number,
+    delay = 0,
+  ): void {
     if (this.muted || !this.ctx) return;
-    const buf = this.buffers.get(name);
-    if (!buf) return;
-    const src = this.ctx.createBufferSource();
-    src.buffer = buf;
-    // slight pitch variance stops repeated sfx from grating
-    const v = opts.pitchVar ?? 0.06;
-    src.playbackRate.value = 1 + (Math.random() * 2 - 1) * v; // presentation only — not sim state
-    const gain = this.ctx.createGain();
-    gain.gain.value = opts.gain ?? 1;
-    src.connect(gain).connect(this.ctx.destination);
-    src.start();
+    const t0 = this.ctx.currentTime + delay;
+    const osc = this.ctx.createOscillator();
+    osc.type = type;
+    osc.frequency.value = freq;
+    const g = this.ctx.createGain();
+    g.gain.setValueAtTime(gain, t0);
+    g.gain.exponentialRampToValueAtTime(0.001, t0 + dur);
+    osc.connect(g).connect(this.ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur);
   }
 
-  private async decode(name: string, url: string): Promise<void> {
-    try {
-      const res = await fetch(url);
-      const buf = await this.ctx!.decodeAudioData(await res.arrayBuffer());
-      this.buffers.set(name, buf);
-    } catch {
-      // a missing sfx should never take the game down
-    }
+  /** Correct catch — pitch ramps a semitone per consecutive catch. */
+  blip(streak: number): void {
+    const f = 440 * Math.pow(2, Math.min(streak, 12) / 12);
+    this.tone(f, 0.12, "triangle", 0.22);
+    this.tone(f * 2, 0.08, "sine", 0.1);
+  }
+
+  /** Harmless wrong catch (teaching tier). */
+  plop(): void {
+    this.tone(220, 0.1, "sine", 0.14);
+  }
+
+  /** Shrink-tier wrong catch — something was lost. */
+  thud(): void {
+    this.tone(110, 0.22, "sawtooth", 0.2);
+    this.tone(70, 0.28, "sine", 0.24);
+  }
+
+  /** One mechanical click per segment locking into place. */
+  click(i: number): void {
+    this.tone(700 + i * 90, 0.05, "square", 0.14);
+  }
+
+  /** The fuse: a small rising major chord. */
+  chord(): void {
+    [523.25, 659.25, 784].forEach((f, i) => this.tone(f, 0.5, "triangle", 0.16, i * 0.06));
   }
 }
