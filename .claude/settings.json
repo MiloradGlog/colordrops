@@ -1,4 +1,7 @@
 {
+  "enabledPlugins": {
+    "gimme@gimmegame": true
+  },
   "extraKnownMarketplaces": {
     "gimmegame": {
       "source": {
