@@ -1,0 +1,121 @@
+{
+  "game": "colordrops",
+  "autoloop": false,
+  "stages": [
+    {
+      "id": "s1-skeleton",
+      "title": "Engine skeleton: loop, scenes, input, wheel rendering",
+      "items": [
+        {
+          "id": "loop",
+          "title": "Fixed-step game loop with render interpolation, pause on hide",
+          "done": true,
+          "verify": "npm run check passes; headless page load shows steady frame count, no console errors"
+        },
+        {
+          "id": "input",
+          "title": "Drag-to-rotate mapped to named actions (pointer + arrow keys)",
+          "done": true,
+          "verify": "drag delta rotates wheel same-frame in headless test; arrows rotate on desktop"
+        },
+        {
+          "id": "wheel-render",
+          "title": "Inner target pie + center-anchored outer ring render with overlap-midpoint splits",
+          "done": true,
+          "verify": "headless screenshot shows two-layer wheel; outer segments centered on inner centers"
+        }
+      ]
+    },
+    {
+      "id": "s2-mechanic",
+      "title": "Core mechanic playable: drops, catching, alignment win",
+      "items": [
+        {
+          "id": "target-gen",
+          "title": "Seeded target pie generation (min share 8%, sum 100)",
+          "done": true,
+          "verify": "same seed reproduces same targets; shares sum to 100 within 1e-9"
+        },
+        {
+          "id": "drop-lifecycle",
+          "title": "Drop telegraph → forming → falling → absorbed/splashed/missed with honest gravity + squash/stretch",
+          "done": true,
+          "verify": "headless run observes full lifecycle; drop lands on center line at wheel top"
+        },
+        {
+          "id": "catch-rules",
+          "title": "Catch grows share by G, shrinks others proportionally; wrong color / gap does nothing",
+          "done": true,
+          "verify": "scripted sim: catch red → red +G, sum stays 100; wrong-color catch changes nothing"
+        },
+        {
+          "id": "win-lock",
+          "title": "Tolerance win check + lock-snap sequence into merged full pie",
+          "done": true,
+          "verify": "autopilot debug hook plays to alignment; lock state reached, input disabled, win shown with drop count"
+        }
+      ]
+    },
+    {
+      "id": "s3-content",
+      "title": "Levels, difficulty curve, score/par, persistence",
+      "items": [
+        {
+          "id": "levels",
+          "title": "Level chain with N/interval/fallSpeed/ε/G curves from spec",
+          "done": false,
+          "verify": "level 4 spawns 5 colors; interval and gravity match curve values"
+        },
+        {
+          "id": "score",
+          "title": "Drop counter, par calculation, best-per-level saved",
+          "done": false,
+          "verify": "beat a level twice; lower count persists as best after reload"
+        }
+      ]
+    },
+    {
+      "id": "s4-shell",
+      "title": "Title/results screens, audio, ads slots, polish",
+      "items": [
+        {
+          "id": "shell",
+          "title": "boot → title → game (HUD) → results scene flow, safe-area aware",
+          "done": false,
+          "verify": "full flow navigable by touch on phone-sized viewport"
+        },
+        {
+          "id": "audio",
+          "title": "WebAudio mixer: catch/splash/lock/win sfx, mute persisted",
+          "done": false,
+          "verify": "sfx audible after first gesture; mute survives reload"
+        },
+        {
+          "id": "ads",
+          "title": "Interstitial slot after every 3rd level (no-op stub in browser)",
+          "done": false,
+          "verify": "stub logs interstitial exactly at levels 3, 6, 9"
+        }
+      ]
+    },
+    {
+      "id": "s5-ship",
+      "title": "Capacitor wrap, icons, store checklist",
+      "items": [
+        {
+          "id": "wrap",
+          "title": "Capacitor Android/iOS project, Preferences-backed save",
+          "done": false,
+          "verify": "app runs on device/emulator; save survives app restart"
+        }
+      ]
+    }
+  ],
+  "mvp": [
+    "s1-skeleton",
+    "s2-mechanic",
+    "s3-content",
+    "s4-shell"
+  ],
+  "done_definition": "All MVP stages verified; playable start-to-finish on a phone-sized viewport; bundle < 5 MB; no console errors."
+}
