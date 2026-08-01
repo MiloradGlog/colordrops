@@ -99,20 +99,50 @@ export class SelectScene implements Scene {
       ctx.fillStyle = accent;
       roundRect(ctx, c.x, c.y, 4, c.h, 2);
       ctx.fill();
+      const pieR = Math.min(c.h * 0.32, 20);
       ctx.textAlign = "left";
       ctx.fillStyle = "rgba(255,255,255,0.92)";
       ctx.font = `600 ${fs}px system-ui, sans-serif`;
       const name = c.cfg.id === "endless" ? "Endless" : c.cfg.name;
-      ctx.fillText(name, c.x + 14, c.y + c.h * 0.42, c.w - 28);
+      ctx.fillText(name, c.x + 14, c.y + c.h * 0.42, c.w - pieR * 2 - 34);
       ctx.fillStyle = accent;
       ctx.font = `700 ${fs * 0.72}px system-ui, sans-serif`;
       ctx.fillText(c.cfg.label.toUpperCase(), c.x + 14, c.y + c.h * 0.75);
+      // honest puzzle preview: levels are deterministic, so the target pie
+      // on the card IS the level
+      const pr = pieR;
+      const px = c.x + c.w - pr - 12;
+      const py = c.y + c.h / 2;
+      if (c.cfg.id === "endless") {
+        ctx.beginPath();
+        ctx.arc(px, py, pr, 0, Math.PI * 2);
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = "rgba(255,255,255,0.4)";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "rgba(255,255,255,0.6)";
+        ctx.font = `700 ${pr}px system-ui, sans-serif`;
+        ctx.textAlign = "center";
+        ctx.fillText("?", px, py + pr * 0.36);
+      } else {
+        let acc = 0;
+        c.cfg.targets.forEach((t, ti) => {
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.arc(px, py, pr, acc * Math.PI * 2, (acc + t) * Math.PI * 2);
+          ctx.closePath();
+          ctx.fillStyle = PALETTE[ti % PALETTE.length]!;
+          ctx.fill();
+          acc += t;
+        });
+      }
       const best = this.saveData.progress.bestByLevel[c.cfg.id];
       if (best !== undefined) {
         ctx.textAlign = "right";
         ctx.fillStyle = "rgba(255,255,255,0.5)";
         ctx.font = `500 ${fs * 0.72}px system-ui, sans-serif`;
-        ctx.fillText(strings.best(best), c.x + c.w - 10, c.y + c.h * 0.75);
+        ctx.fillText(strings.best(best), px - pr - 10, c.y + c.h * 0.75);
       }
     }
 

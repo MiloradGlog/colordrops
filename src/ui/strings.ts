@@ -7,6 +7,8 @@ export const strings = {
   par: (n: number) => `PAR ${n}`,
   best: (n: number) => `BEST ${n}`,
   locked: "LOCKED!",
+  newBest: "NEW BEST!",
+  aligned: (k: number, n: number) => `ALIGNED ${k}/${n}`,
   tapSelect: "tap for level select",
   tapNextBoard: "tap for next board",
   result: (drops: number, par: number) => `${drops} drops · par ${par}`,

@@ -80,6 +80,8 @@ export class GameScene implements Scene {
   private ripples: Ripple[] = [];
   private particles: Particle[] = [];
   private fxRng = new Rng(0xfeedface); // presentation-only randomness, still seeded
+  private tapStart: { x: number; y: number } | null = null;
+  private newBest = false;
 
   constructor(
     private input: Input,
@@ -128,6 +130,20 @@ export class GameScene implements Scene {
     this.age += dt;
 
     if (this.phase === "playing") {
+      // back chip: a clean tap (not a drag) on the top-left chip exits
+      if (this.input.pointer.justPressed) {
+        this.tapStart = { x: this.input.pointer.x, y: this.input.pointer.y };
+      }
+      if (this.input.pointer.justReleased && this.tapStart) {
+        const dx = this.input.pointer.x - this.tapStart.x;
+        const dy = this.input.pointer.y - this.tapStart.y;
+        const chip = this.backChip(L);
+        if (dx * dx + dy * dy < 100 && Math.hypot(this.tapStart.x - chip.x, this.tapStart.y - chip.y) < chip.r + 8) {
+          this.onExit();
+          return;
+        }
+        this.tapStart = null;
+      }
       if (this.autopilot) this.autoSteer();
       rotate.tick(this.wheel, dt);
       this.updateSpawning(dt, L);
@@ -235,10 +251,15 @@ export class GameScene implements Scene {
     this.phase = "won";
     const key = this.cfg.id;
     const prev = this.saveData.progress.bestByLevel[key];
+    this.newBest = prev !== undefined && this.caught < prev;
     if (prev === undefined || this.caught < prev) {
       this.saveData.progress.bestByLevel[key] = this.caught;
     }
     save(this.saveData);
+  }
+
+  private backChip(L: Layout): { x: number; y: number; r: number } {
+    return { x: 30, y: L.h * 0.045, r: 17 };
   }
 
   private spawnSplash(d: Drop, L: Layout): void {
@@ -425,6 +446,19 @@ export class GameScene implements Scene {
       ctx.closePath();
       ctx.fillStyle = PALETTE[i % PALETTE.length]!;
       ctx.fill();
+      // within-tolerance feedback: a bright rim on segments already aligned
+      if (
+        this.phase === "playing" &&
+        Math.abs(this.shares[i]! - this.targets[i]!) <= this.cfg.epsilon
+      ) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, outerR + pulse + 2.5, a0 + 0.02, a1 - 0.02);
+        ctx.strokeStyle = "rgba(255,255,255,0.85)";
+        ctx.lineWidth = 3;
+        ctx.lineCap = "round";
+        ctx.stroke();
+        ctx.lineCap = "butt";
+      }
     }
 
     // lock flash per just-snapped segment
@@ -461,6 +495,16 @@ export class GameScene implements Scene {
     ctx.strokeStyle = "rgba(11,11,16,0.9)";
     ctx.lineWidth = Math.max(1.5, outerR * 0.015);
     ctx.stroke();
+    // hairline spokes between target slices — boundaries are the goal posts
+    ctx.strokeStyle = "rgba(11,11,16,0.8)";
+    ctx.lineWidth = Math.max(1.2, outerR * 0.012);
+    for (let i = 0; i < this.n(); i++) {
+      const a = th + this.bounds[i]! * TAU;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a) * pieR, cy + Math.sin(a) * pieR);
+      ctx.stroke();
+    }
 
     // catch point marker
     ctx.beginPath();
@@ -490,8 +534,13 @@ export class GameScene implements Scene {
       const tt = d.phase === "telegraph" ? d.t / TELEGRAPH_S : 1;
       const ft = d.phase === "forming" ? d.t / FORMING_S : 0;
       const barHalf = (L.w / 2) * (1 - ft);
-      ctx.fillStyle = hexA(color, 0.25 + 0.5 * tt);
-      ctx.fillRect(L.cx - barHalf, 0, barHalf * 2, Math.max(3, L.h * 0.006));
+      const barH = Math.max(7, L.h * 0.011);
+      ctx.save();
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 16;
+      ctx.fillStyle = hexA(color, 0.35 + 0.55 * tt);
+      ctx.fillRect(L.cx - barHalf, 0, barHalf * 2, barH);
+      ctx.restore();
       if (d.phase === "forming") {
         // droplet swells and sags from the top edge — surface tension pose
         const r = d.r * (0.25 + 0.75 * ft);
@@ -540,20 +589,35 @@ export class GameScene implements Scene {
 
   private drawHud(ctx: CanvasRenderingContext2D, L: Layout): void {
     const fs = Math.max(13, L.h * 0.019);
-    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    // back chip
+    const chip = this.backChip(L);
+    ctx.beginPath();
+    ctx.arc(chip.x, chip.y, chip.r, 0, TAU);
+    ctx.fillStyle = "rgba(255,255,255,0.08)";
+    ctx.fill();
+    ctx.strokeStyle = "rgba(255,255,255,0.35)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = "rgba(255,255,255,0.75)";
+    ctx.font = `600 ${fs * 1.2}px system-ui, sans-serif`;
+    ctx.textAlign = "center";
+    ctx.fillText("‹", chip.x - 1, chip.y + fs * 0.42);
+
     ctx.font = `600 ${fs}px system-ui, sans-serif`;
     ctx.textAlign = "left";
-    ctx.fillText(this.cfg.name, 16, L.h * 0.05);
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillText(this.cfg.name, chip.x + chip.r + 12, L.h * 0.05);
     ctx.fillStyle = "rgba(255,255,255,0.45)";
-    ctx.fillText(this.cfg.label.toUpperCase(), 16, L.h * 0.05 + fs * 1.3);
+    ctx.fillText(this.cfg.label.toUpperCase(), chip.x + chip.r + 12, L.h * 0.05 + fs * 1.3);
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.textAlign = "right";
     ctx.fillText(`${strings.drops(this.caught)} · ${strings.par(this.levelPar)}`, L.w - 16, L.h * 0.05);
-    const best = this.saveData.progress.bestByLevel[this.cfg.id];
-    if (best !== undefined) {
-      ctx.fillStyle = "rgba(255,255,255,0.45)";
-      ctx.fillText(strings.best(best), L.w - 16, L.h * 0.05 + fs * 1.3);
+    let alignedCount = 0;
+    for (let i = 0; i < this.n(); i++) {
+      if (Math.abs(this.shares[i]! - this.targets[i]!) <= this.cfg.epsilon) alignedCount++;
     }
+    ctx.fillStyle = alignedCount === this.n() ? "rgba(255,255,255,0.9)" : "rgba(255,255,255,0.45)";
+    ctx.fillText(strings.aligned(alignedCount, this.n()), L.w - 16, L.h * 0.05 + fs * 1.3);
     // teaching hint until the first catch
     if (this.cfg.hint && this.caught === 0 && this.phase === "playing") {
       ctx.textAlign = "center";
@@ -581,12 +645,27 @@ export class GameScene implements Scene {
     ctx.font = `500 ${Math.max(16, L.h * 0.024)}px system-ui, sans-serif`;
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.fillText(strings.result(this.caught, this.levelPar), L.cx, L.h * 0.3 + 36);
+    let y = L.h * 0.3 + 68;
+    if (this.newBest) {
+      const wob = 1 + Math.sin(this.age * 6) * 0.06;
+      ctx.save();
+      ctx.translate(L.cx, y);
+      ctx.scale(wob, wob);
+      ctx.fillStyle = "#ffe14d";
+      ctx.font = `800 ${Math.max(18, L.h * 0.028)}px system-ui, sans-serif`;
+      ctx.fillText(strings.newBest, 0, 0);
+      ctx.restore();
+      y += 36;
+    } else {
+      const best = this.saveData.progress.bestByLevel[this.cfg.id];
+      if (best !== undefined) {
+        ctx.fillStyle = "rgba(255,255,255,0.5)";
+        ctx.fillText(strings.best(best), L.cx, y);
+        y += 32;
+      }
+    }
     ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.fillText(
-      this.cfg.sequence === null ? strings.tapNextBoard : strings.tapSelect,
-      L.cx,
-      L.h * 0.3 + 68,
-    );
+    ctx.fillText(this.cfg.sequence === null ? strings.tapNextBoard : strings.tapSelect, L.cx, y);
   }
 }
 
