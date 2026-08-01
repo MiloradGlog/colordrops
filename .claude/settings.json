@@ -1,0 +1,10 @@
+{
+  "extraKnownMarketplaces": {
+    "gimmegame": {
+      "source": {
+        "source": "github",
+        "repo": "miloradglog/gimmegame"
+      }
+    }
+  }
+}
