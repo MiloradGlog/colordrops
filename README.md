@@ -1,4 +1,4 @@
-# ColorDrops
+# ColorFall (formerly ColorDrops)
 
 Hold your finger down and turn the wheel. That's the whole game.
 

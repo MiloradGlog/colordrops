@@ -1,4 +1,4 @@
-// Universal audio, ColorDrops flavor: a tiny procedural WebAudio synth —
+// Universal audio, ColorFall flavor: a tiny procedural WebAudio synth —
 // zero asset files, every sfx generated. Context unlocks on first gesture
 // (mobile autoplay rules); mute persists via save settings.
 

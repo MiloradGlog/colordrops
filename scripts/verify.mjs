@@ -177,7 +177,7 @@ try {
   );
   await page.reload();
   await page.waitForFunction(() => typeof window.__cd?.state === "function");
-  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("colordrops-save")));
+  const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("colorfall-save")));
   assert(
     typeof saved?.progress?.bestByLevel?.l1 === "number",
     `s4/select-flow: best persists across reload (l1 best ${saved?.progress?.bestByLevel?.l1})`,
@@ -217,13 +217,13 @@ try {
   await page.mouse.click(390 - 34, 34);
   await page.waitForTimeout(150);
   const soundOff = await page.evaluate(
-    () => JSON.parse(localStorage.getItem("colordrops-save")).settings.sound,
+    () => JSON.parse(localStorage.getItem("colorfall-save")).settings.sound,
   );
   assert(soundOff === false, "s6/audio: sound chip toggles and persists mute");
   await page.reload();
   await page.waitForFunction(() => typeof window.__cd?.state === "function");
   const soundStill = await page.evaluate(
-    () => JSON.parse(localStorage.getItem("colordrops-save")).settings.sound,
+    () => JSON.parse(localStorage.getItem("colorfall-save")).settings.sound,
   );
   assert(soundStill === false, "s6/audio: mute survives reload");
 
@@ -231,7 +231,7 @@ try {
   await page.mouse.click(390 - 80, 34);
   await page.waitForTimeout(150);
   const symbolsOn = await page.evaluate(
-    () => JSON.parse(localStorage.getItem("colordrops-save")).settings.symbols,
+    () => JSON.parse(localStorage.getItem("colorfall-save")).settings.symbols,
   );
   assert(symbolsOn === true, "a11y: symbols mode toggles and persists");
   await page.evaluate(() => window.__cd.goto("l1"));

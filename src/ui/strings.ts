@@ -1,7 +1,7 @@
 // Keyed strings table from day one (game-universals). English only for now.
 
 export const strings = {
-  title: "COLORDROPS",
+  title: "COLORFALL",
   tagline: "hold & drag to turn · catch drops with their color",
   drops: (n: number) => `DROPS ${n}`,
   par: (n: number) => `PAR ${n}`,

@@ -1,5 +1,5 @@
 // Layer 3: raw pointer/touch/keys → named game actions, mapped in ONE place.
-// ColorDrops has one verb — turn the wheel — so the actions are a rotation
+// ColorFall has one verb — turn the wheel — so the actions are a rotation
 // axis (arrow keys, desktop dev) and a drag delta (the real mobile control).
 // Gameplay never reads events; it reads axis() and consumeDragDX().
 

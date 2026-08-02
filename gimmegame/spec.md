@@ -1,4 +1,4 @@
-# ColorDrops — spec (v2: handcrafted-levels variation)
+# ColorFall — spec (v2: handcrafted-levels variation)
 
 Supersedes the v1 procedural spec on this branch. Source design doc: the
 user's "Circle Alignment Game" spec (2026-08-01). Engine and core mechanic

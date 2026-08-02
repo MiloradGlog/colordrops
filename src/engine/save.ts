@@ -1,7 +1,8 @@
 // Universal save: one versioned JSON blob. Swap localStorage for Capacitor
 // Preferences behind this same interface at ship stage.
 
-const KEY = "colordrops-save";
+const KEY = "colorfall-save";
+const LEGACY_KEY = "colordrops-save"; // pre-rename saves migrate on first load
 const VERSION = 1;
 
 export interface SaveData {
@@ -20,7 +21,7 @@ const defaults = (): SaveData => ({
 
 export function load(): SaveData {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = localStorage.getItem(KEY) ?? localStorage.getItem(LEGACY_KEY);
     if (!raw) return defaults();
     const data = JSON.parse(raw) as SaveData;
     return data.version === VERSION ? data : migrate(data);
