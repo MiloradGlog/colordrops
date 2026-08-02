@@ -93,6 +93,7 @@ export class GameScene implements Scene {
   private shake = 0;
   private shareVel!: number[];
   private boardsCleared = 0;
+  private sessionSpawns = 0; // never reset between boards — drives the ramp
   private trail: { y: number; age: number }[] = [];
   private lockClicks = 0;
   private chordPlayed = false;
@@ -231,12 +232,23 @@ export class GameScene implements Scene {
     return pickColor(this.rng, this.targets, this.shares, this.cfg.epsilon);
   }
 
+  /**
+   * Endless ramp — the one thing that changes as a session goes on: drops
+   * come more and more frequently. Fast early, flattening toward a floor.
+   * Handcrafted levels keep their fixed cadence (determinism is sacred).
+   */
+  private effectiveInterval(): number {
+    if (this.cfg.sequence !== null) return this.cfg.intervalS;
+    return Math.max(0.9, this.cfg.intervalS - 0.35 * Math.log2(1 + this.sessionSpawns / 4));
+  }
+
   private updateSpawning(dt: number, L: Layout): void {
     if (!this.drop) {
       this.spawnTimer -= dt;
       if (this.spawnTimer <= 0) {
         this.drop = makeDrop(this.nextColor(), Math.max(10, L.outerR * 0.09));
-        this.spawnTimer = this.cfg.intervalS;
+        this.sessionSpawns++;
+        this.spawnTimer = this.effectiveInterval();
       }
       return;
     }
@@ -311,12 +323,10 @@ export class GameScene implements Scene {
       this.saveData.progress.bestByLevel[key] = this.caught;
     }
     if (this.cfg.sequence === null) this.boardsCleared++;
-    if (this.cfg.sequence !== null) {
-      // interstitial slot at a natural break, every 3rd level completion
-      const done = (this.saveData.progress.completions ?? 0) + 1;
-      this.saveData.progress.completions = done;
-      if (done % 3 === 0) void ads.interstitial();
-    }
+    // interstitial slot at a natural break, every 3rd completion (boards too)
+    const done = (this.saveData.progress.completions ?? 0) + 1;
+    this.saveData.progress.completions = done;
+    if (done % 3 === 0) void ads.interstitial();
     save(this.saveData);
   }
 
@@ -448,6 +458,8 @@ export class GameScene implements Scene {
       theta: this.wheel.theta,
       caught: this.caught,
       par: this.levelPar,
+      sessionSpawns: this.sessionSpawns,
+      effectiveInterval: this.effectiveInterval(),
       drop: this.drop ? { color: this.drop.colorIdx, phase: this.drop.phase } : null,
     };
   }

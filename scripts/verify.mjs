@@ -33,19 +33,22 @@ try {
   await page.goto(URL);
   await page.waitForFunction(() => typeof window.__cd?.state === "function");
 
-  // — boot: level select —
+  // — boot: title screen (endless-first) —
   await page.waitForTimeout(300);
   assert(
-    (await page.evaluate(() => window.__cd.state())).screen === "select",
-    "s4/select-flow: game boots into level select",
+    (await page.evaluate(() => window.__cd.state())).screen === "title",
+    "s7/endless-first: game boots into the title screen",
   );
-  await page.screenshot({ path: "scripts/screenshot-select.png" });
+  await page.screenshot({ path: "scripts/screenshot-title.png" });
 
-  // — tapping the first card starts l1 —
-  await page.mouse.click(100, 170);
+  // — one tap anywhere starts endless —
+  await page.mouse.click(195, 500);
   await page.waitForTimeout(120);
   const afterTap = await page.evaluate(() => window.__cd.state());
-  assert(afterTap.screen === "game" && afterTap.id === "l1", "s4/select-flow: tap card starts l1");
+  assert(
+    afterTap.screen === "game" && afterTap.id === "endless",
+    "s7/endless-first: tap-to-play starts an endless board",
+  );
 
   // — s1 input: drag rotates; arrows rotate the other way —
   const t0 = (await page.evaluate(() => window.__cd.state())).theta;
@@ -172,8 +175,8 @@ try {
   await page.mouse.click(195, 500);
   await page.waitForTimeout(150);
   assert(
-    (await page.evaluate(() => window.__cd.state())).screen === "select",
-    "s4/select-flow: tap on won screen returns to level select",
+    (await page.evaluate(() => window.__cd.state())).screen === "title",
+    "s7/endless-first: tap on a finished level returns to title",
   );
   await page.reload();
   await page.waitForFunction(() => typeof window.__cd?.state === "function");
@@ -205,14 +208,36 @@ try {
     "s5/endless: tap after win starts a fresh board",
   );
 
-  // — s6: ads stub fires exactly on every 3rd LEVEL completion —
-  // this run completed 11 levels (10 in the sweep + the nav re-win) plus an
-  // endless board (which must not count) → interstitials at 3, 6, 9 = 3 logs
+  // — s7: the ramp — drop cadence tightens as the session goes on —
+  const ramp = await page.evaluate(() => {
+    const before = window.__cd.state();
+    window.__cd.auto(true);
+    for (let s = 0; s < 40; s++) {
+      window.__cd.ff(1);
+      const st = window.__cd.state();
+      if (st.phase === "won") window.__cd.ff(2); // ride through wins; tap not needed for ramp
+    }
+    window.__cd.auto(false);
+    const after = window.__cd.state();
+    return { before, after };
+  });
+  assert(
+    ramp.after.sessionSpawns > ramp.before.sessionSpawns &&
+      ramp.after.effectiveInterval < ramp.before.effectiveInterval - 0.02,
+    `s7/ramp: interval tightened ${ramp.before.effectiveInterval.toFixed(2)}s → ${ramp.after.effectiveInterval.toFixed(2)}s over ${ramp.after.sessionSpawns - ramp.before.sessionSpawns} drops`,
+  );
+
+  // — s6: ads stub fires on every 3rd completion (levels AND boards) —
   const adLogs = debugLogs.filter((t) => t.includes("[ads] interstitial"));
-  assert(adLogs.length === 3, `s6/ads: interstitial fired 3 times in 11 completions (got ${adLogs.length})`);
+  const savedForAds = await page.evaluate(() => JSON.parse(localStorage.getItem("colorfall-save")));
+  const expectedAds = Math.floor((savedForAds?.progress?.completions ?? 0) / 3);
+  assert(
+    adLogs.length === expectedAds && expectedAds >= 3,
+    `s6/ads: interstitial fired ${adLogs.length}x for ${savedForAds?.progress?.completions} completions (expected ${expectedAds})`,
+  );
 
   // — s6: mute toggle persists —
-  await page.evaluate(() => window.__cd.goto("select"));
+  await page.evaluate(() => window.__cd.goto("title"));
   await page.waitForTimeout(150);
   await page.mouse.click(390 - 34, 34);
   await page.waitForTimeout(150);

@@ -1,6 +1,6 @@
 {
   "game": "colorfall",
-  "variant": "v2-handcrafted-levels",
+  "variant": "v3-endless-first",
   "autoloop": false,
   "stages": [
     {
@@ -122,14 +122,39 @@
           "verify": "stub logs interstitial exactly on 3rd, 6th, 9th completion"
         }
       ]
+    },
+    {
+      "id": "s7-endless-first",
+      "title": "v3 launch shape: endless only, title screen, session ramp",
+      "items": [
+        {
+          "id": "title-flow",
+          "title": "Boot → title (wordmark, tap-to-play, best, sound/symbols chips) → endless; back chip and finished levels return to title; level select hidden",
+          "done": true,
+          "verify": "headless: boot shows title; one tap starts endless; level win returns to title"
+        },
+        {
+          "id": "ramp",
+          "title": "Session ramp: drop interval shrinks with every spawn (2.0s → 0.9s floor), cumulative across boards, levels unaffected",
+          "done": true,
+          "verify": "headless: effectiveInterval strictly decreases over a 40s autopilot session"
+        },
+        {
+          "id": "ads-boards",
+          "title": "Interstitial every 3rd completion counting endless boards",
+          "done": true,
+          "verify": "ad log count equals floor(completions/3) at end of verify run"
+        }
+      ]
     }
   ],
   "mvp": [
     "s1-skeleton",
     "s2-mechanic",
     "s3-rules",
-    "s4-levels",
-    "s5-endless"
+    "s5-endless",
+    "s6-shell",
+    "s7-endless-first"
   ],
-  "done_definition": "All MVP stages verified; all 10 levels + endless playable start-to-finish on a phone-sized viewport; bundle < 5 MB; no console errors."
+  "done_definition": "v3: endless playable from a single tap on a phone-sized viewport; ramp verified; levels remain verified but hidden; bundle < 5 MB; no console errors."
 }

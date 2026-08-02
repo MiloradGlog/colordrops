@@ -1,8 +1,21 @@
-# ColorFall — spec (v2: handcrafted-levels variation)
+# ColorFall — spec (v3: endless-first launch)
 
 Supersedes the v1 procedural spec on this branch. Source design doc: the
 user's "Circle Alignment Game" spec (2026-08-01). Engine and core mechanic
 carry over from v1 verified stages s1+s2.
+
+## v3 launch decision (designer, 2026-08-02)
+
+The STARTING version ships **endless mode only**: boot → title screen →
+tap → endless boards, chained forever. The single difficulty mechanic is
+the **ramp**: as the session goes on, drops fall more and more frequently
+(interval 2.0s shrinking log-ish to a 0.9s floor, cumulative across boards,
+reset when returning to title). Nothing else escalates.
+
+The Geometry Dash structure below (handcrafted deterministic levels, level
+select, difficulty labels) is BUILT AND VERIFIED but hidden from the UI —
+it ships in a later update if the game finds popularity. Level cadence
+stays fixed (no ramp) to preserve determinism for that day.
 
 ## Type
 

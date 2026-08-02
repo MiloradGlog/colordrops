@@ -4,7 +4,7 @@ import { Input } from "./engine/input";
 import { load, installAutoSave } from "./engine/save";
 import { Audio } from "./engine/audio";
 import { GameScene } from "./game/scenes/game";
-import { SelectScene } from "./game/scenes/select";
+import { TitleScene } from "./game/scenes/title";
 import { LEVELS, endlessConfig, type RunConfig } from "./game/levels";
 import { applyCatch, applyShrink } from "./game/behaviors/catch";
 import { genTargets, isAligned } from "./game/wheel";
@@ -21,18 +21,24 @@ audio.muted = !saveData.settings.sound;
 let current: GameScene | null = null;
 let autopilotWanted = false;
 
-function showSelect(): void {
+// v3 endless-first: boot → title → endless. The handcrafted levels remain in
+// the codebase (reachable via __cd.goto for tests) for a later update.
+function showTitle(): void {
   current = null;
-  scenes.replace(new SelectScene(input, canvas, saveData, audio, startRun));
+  scenes.replace(new TitleScene(input, canvas, saveData, audio, playEndless));
+}
+
+function playEndless(): void {
+  startRun(endlessConfig(1));
 }
 
 function startRun(cfg: RunConfig): void {
-  current = new GameScene(input, canvas, saveData, audio, cfg, showSelect);
+  current = new GameScene(input, canvas, saveData, audio, cfg, showTitle);
   current.autopilot = autopilotWanted;
   scenes.replace(current);
 }
 
-showSelect();
+showTitle();
 
 startLoop(
   {
@@ -66,8 +72,8 @@ declare global {
 
 window.__cd = {
   goto(id: string) {
-    if (id === "select") {
-      showSelect();
+    if (id === "title") {
+      showTitle();
       return;
     }
     const cfg = id === "endless" ? endlessConfig(1) : LEVELS.find((l) => l.id === id);
@@ -86,7 +92,7 @@ window.__cd = {
     for (let i = 0; i < steps; i++) scenes.update(1 / 60);
   },
   state() {
-    return current ? current.debugState() : { screen: "select" };
+    return current ? current.debugState() : { screen: "title" };
   },
   pure: {
     applyCatch,
