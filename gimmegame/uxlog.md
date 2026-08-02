@@ -50,20 +50,25 @@ Fixed:
   hue. Verified toggle persistence + screenshot.
 - Endless won screen shows a session tally (boards cleared).
 
-## Open backlog (ranked, revisit every iteration)
+## Iteration 4 (2026-08-02)
 
-1. prefers-reduced-motion: disable shake/hit-stop/spring overshoot for users
-   who ask the OS for less motion.
-2. Safe-area insets (notches) — matters at Capacitor stage; telegraph bar
-   sits at y=0 which a notch could swallow in standalone/fullscreen.
-3. Difficulty tuning needs HUMAN data — autopilot clears everything but
-   par-vs-real-play gaps on l8-l10 are guesses. Ask the user after play.
-4. Sound design taste check (blip timbre/levels) — needs human ears.
-5. Rotation feel on a REAL phone (latency, 1:1 mapping, inertia damping) —
-   cannot be verified headlessly; needs the user's thumb.
+Fixed:
+- prefers-reduced-motion respected: shake and hit-stop disabled, share
+  spring overdamped (no wobble) when the OS asks for less motion.
 
-## Honest status
+## Remaining — ALL human-feedback-gated
 
-Not yet "perfectly designed". The loop continues until the backlog's
-player-facing items are done and the ones needing human hands (6, 9) have
-real feedback — those two can only be closed by the user playing.
+1. Difficulty tuning: par-vs-real-play gaps on l8–l10 are authored guesses;
+   needs the user's runs.
+2. Sound design taste (blip timbre, levels, chord) — needs human ears.
+3. Rotation feel on a real phone (latency, 1:1 rim mapping, inertia
+   damping) — needs the user's thumb on glass.
+4. Safe-area insets — deferred to the Capacitor ship stage (s5-ship) where
+   fullscreen/notch actually applies; in-browser play is unaffected.
+
+## Honest status — loop closed 2026-08-02
+
+Everything machine-verifiable is done and verified (28 automated checks).
+"Perfectly designed" cannot be honestly claimed by an autopilot: the three
+open items above are taste and feel, and only the player can close them.
+The polish loop stops here; it resumes the moment play feedback arrives.

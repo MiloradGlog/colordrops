@@ -39,6 +39,10 @@ const TAU = Math.PI * 2;
 const SNAP_PER_SEG = 0.09; // lock sequence: seconds per segment click
 const MERGE_S = 0.45;
 const INTRO_S = 2.6; // rule-change banner hold time
+// OS-level "less motion please": no shake, no hit-stop, no spring overshoot
+const REDUCED_MOTION =
+  typeof window !== "undefined" &&
+  (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
 
 interface Ripple {
   t: number;
@@ -199,7 +203,8 @@ export class GameScene implements Scene {
       // liquid feel (segments slosh into their new size, don't just ease)
       const x = this.displayShares[i]!;
       const v = this.shareVel[i]!;
-      const acc = (this.shares[i]! - x) * 90 - v * 12;
+      const damping = REDUCED_MOTION ? 22 : 12; // overdamped kills the wobble
+      const acc = (this.shares[i]! - x) * 90 - v * damping;
       this.shareVel[i] = v + acc * dt;
       this.displayShares[i] = x + this.shareVel[i]! * dt;
       this.pulses[i] = Math.max(0, this.pulses[i]! - dt * 3);
@@ -266,19 +271,19 @@ export class GameScene implements Scene {
       this.pulses[idx] = 1;
       this.streak++;
       this.audio.blip(this.streak);
-      this.hitStop = 0.05;
+      if (!REDUCED_MOTION) this.hitStop = 0.05;
     } else if (this.cfg.wrongCatch === "shrinkDrop") {
       this.shares = applyShrink(this.shares, d.colorIdx, this.cfg.growth);
       this.spawnSplash(d, L); // shrink is loud: burst in the shrinking color
       this.streak = 0;
       this.audio.thud();
-      this.shake = 1;
+      if (!REDUCED_MOTION) this.shake = 1;
     } else if (this.cfg.wrongCatch === "shrinkSelf") {
       this.shares = applyShrink(this.shares, idx, this.cfg.growth);
       this.spawnSplash(d, L);
       this.streak = 0;
       this.audio.thud();
-      this.shake = 1;
+      if (!REDUCED_MOTION) this.shake = 1;
     } else {
       // wrongCatch "none": absorbed, counted, no physical effect
       this.streak = 0;
