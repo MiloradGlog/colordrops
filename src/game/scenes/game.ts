@@ -97,6 +97,8 @@ export class GameScene implements Scene {
   private trail: { y: number; age: number }[] = [];
   private lockClicks = 0;
   private chordPlayed = false;
+  private prevDropPhase: string | null = null;
+  private recoilT = 0; // surface-tension recoil in the bar after pinch-off
 
   constructor(
     private input: Input,
@@ -174,6 +176,21 @@ export class GameScene implements Scene {
       if (this.autopilot) this.autoSteer();
       rotate.tick(this.wheel, dt);
       this.updateSpawning(wdt, L);
+      // pinch-off moment: satellite droplet + recoil bead in the bar
+      if (this.prevDropPhase === "forming" && this.drop?.phase === "falling") {
+        this.recoilT = 0.3;
+        const d = this.drop;
+        this.particles.push({
+          x: L.cx + (this.fxRng.next() - 0.5) * 3,
+          y: d.y - d.r * 1.1,
+          vx: (this.fxRng.next() - 0.5) * 30,
+          vy: 60,
+          t: 0.25, // shorter life than a splash particle
+          colorIdx: d.colorIdx,
+        });
+      }
+      this.prevDropPhase = this.drop ? this.drop.phase : null;
+      this.recoilT = Math.max(0, this.recoilT - dt);
       if (this.drop?.phase === "falling") {
         this.trail.push({ y: this.drop.y, age: 0 });
       }
@@ -283,6 +300,7 @@ export class GameScene implements Scene {
       this.pulses[idx] = 1;
       this.streak++;
       this.audio.blip(this.streak);
+      this.spawnRimSplash(d, L);
       if (!REDUCED_MOTION) this.hitStop = 0.05;
     } else if (this.cfg.wrongCatch === "shrinkDrop") {
       this.shares = applyShrink(this.shares, d.colorIdx, this.cfg.growth);
@@ -332,6 +350,23 @@ export class GameScene implements Scene {
 
   private backChip(L: Layout): { x: number; y: number; r: number } {
     return { x: 30, y: L.h * 0.045, r: 17 };
+  }
+
+  /** Correct catch: liquid spreads along the rim — tangent splash, not a burst. */
+  private spawnRimSplash(d: Drop, L: Layout): void {
+    const y = L.cy - L.outerR - 2;
+    for (let i = 0; i < 6; i++) {
+      const dir = i % 2 === 0 ? 1 : -1;
+      const sp = 90 + this.fxRng.next() * 130;
+      this.particles.push({
+        x: L.cx + dir * (2 + this.fxRng.next() * 5),
+        y,
+        vx: dir * sp,
+        vy: -30 - this.fxRng.next() * 60,
+        t: 0.15,
+        colorIdx: d.colorIdx,
+      });
+    }
   }
 
   private spawnSplash(d: Drop, L: Layout): void {
@@ -640,14 +675,24 @@ export class GameScene implements Scene {
       ctx.stroke();
     }
 
-    // catch point marker
+    // catch point marker — tinted with the incoming drop's color for clarity
+    const d = this.drop;
+    const active = d && (d.phase === "telegraph" || d.phase === "forming" || d.phase === "falling");
+    ctx.save();
+    if (active) {
+      ctx.shadowColor = PALETTE[d.colorIdx % PALETTE.length]!;
+      ctx.shadowBlur = 10;
+    }
     ctx.beginPath();
     ctx.moveTo(cx - 7, cy - outerR - 12);
     ctx.lineTo(cx + 7, cy - outerR - 12);
     ctx.lineTo(cx, cy - outerR - 4);
     ctx.closePath();
-    ctx.fillStyle = "rgba(255,255,255,0.65)";
+    ctx.fillStyle = active
+      ? hexA(PALETTE[d.colorIdx % PALETTE.length]!, 0.95)
+      : "rgba(255,255,255,0.65)";
     ctx.fill();
+    ctx.restore();
   }
 
   private drawRipples(ctx: CanvasRenderingContext2D, L: Layout): void {
@@ -664,38 +709,110 @@ export class GameScene implements Scene {
   private drawDrop(ctx: CanvasRenderingContext2D, L: Layout, d: Drop): void {
     const color = PALETTE[d.colorIdx % PALETTE.length]!;
     if (d.phase === "telegraph" || d.phase === "forming") {
-      // top border becomes the next color, then gathers to center into a droplet
-      const tt = d.phase === "telegraph" ? d.t / TELEGRAPH_S : 1;
-      const ft = d.phase === "forming" ? d.t / FORMING_S : 0;
-      const barHalf = (L.w / 2) * (1 - ft);
-      const barH = Math.max(7, L.h * 0.011);
-      ctx.save();
-      ctx.shadowColor = color;
-      ctx.shadowBlur = 16;
-      ctx.fillStyle = hexA(color, 0.35 + 0.55 * tt);
-      ctx.fillRect(L.cx - barHalf, 0, barHalf * 2, barH);
-      ctx.restore();
-      if (d.phase === "forming") {
-        // droplet swells and sags from the top edge — surface tension pose
-        const r = d.r * (0.25 + 0.75 * ft);
-        const sag = r * (0.5 + 0.9 * ft * ft);
-        ctx.beginPath();
-        ctx.ellipse(L.cx, sag + r * 0.2, r * (1 - 0.18 * ft), r * (1 + 0.22 * ft), 0, 0, TAU);
-        ctx.fillStyle = color;
-        ctx.fill();
-        if (this.symbolsOn() && ft > 0.4) {
-          drawGlyph(ctx, d.colorIdx, L.cx, sag + r * 0.2, r * 0.4, "rgba(11,11,16,0.65)");
-        }
-      }
+      this.drawDropBirth(ctx, L, d, color);
       return;
     }
-    if (d.phase === "falling") this.drawDropShape(ctx, L, d, 1);
+    if (d.phase === "falling") {
+      // surface-tension recoil: the bar's remnant bead springs back and fades
+      if (this.recoilT > 0) {
+        const rt = this.recoilT / 0.3;
+        ctx.beginPath();
+        ctx.ellipse(L.cx, 2, d.r * 0.5 * rt, d.r * 0.35 * rt, 0, 0, Math.PI, false);
+        ctx.fillStyle = hexA(color, 0.6 * rt);
+        ctx.fill();
+      }
+      // clarity: faint dotted guide from the drop to the catch point
+      ctx.save();
+      ctx.strokeStyle = hexA(color, 0.18);
+      ctx.lineWidth = 1.5;
+      ctx.setLineDash([3, 8]);
+      ctx.beginPath();
+      ctx.moveTo(L.cx, d.y + d.r);
+      ctx.lineTo(L.cx, L.cy - L.outerR - 6);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.restore();
+      this.drawDropShape(ctx, L, d, 1);
+    }
     if (d.phase === "absorbed") {
       const t = d.t / 0.4;
       ctx.beginPath();
       ctx.arc(L.cx, L.cy - L.outerR, d.r * (1 - t), 0, TAU);
       ctx.fillStyle = hexA(color, 1 - t);
       ctx.fill();
+    }
+  }
+
+  /**
+   * The birth of a drop, drawn like liquid: the tinted bar drains toward
+   * center, its volume flowing into a pendant bead that swells (∛ growth —
+   * volume-true), sags, thins into a neck, and pinches off. The bar keeps a
+   * shrinking recoil bead for a beat after detach.
+   */
+  private drawDropBirth(ctx: CanvasRenderingContext2D, L: Layout, d: Drop, color: string): void {
+    const tt = d.phase === "telegraph" ? d.t / TELEGRAPH_S : 1;
+    const ft = d.phase === "forming" ? easeInOut(d.t / FORMING_S) : 0;
+    const barH = Math.max(7, L.h * 0.011);
+    const barHalf = (L.w / 2) * (1 - ft * 0.96);
+
+    // ink wash: the border becomes the color (meniscus gradient, soft glow)
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 16;
+    const grad = ctx.createLinearGradient(0, 0, 0, barH);
+    grad.addColorStop(0, hexA(color, 0.35 + 0.55 * tt));
+    grad.addColorStop(1, hexA(color, 0.55 + 0.45 * tt));
+    ctx.fillStyle = grad;
+    ctx.fillRect(L.cx - barHalf, 0, barHalf * 2, barH);
+    ctx.restore();
+    if (d.phase === "telegraph") return;
+
+    // pendant bead: radius grows with the cube root of drained volume
+    const R = d.r;
+    const r = R * (0.3 + 0.7 * Math.cbrt(ft));
+    const sag = barH + r * 0.4 + R * 1.5 * ft * ft; // sphere center y
+    // neck: wide meniscus → thin thread → pinch
+    const pinchT = 0.84;
+    const neckF =
+      ft < pinchT ? 1 - (ft / pinchT) * 0.8 : Math.max(0, 1 - (ft - pinchT) / (1 - pinchT)) * 0.2;
+    const neckW = r * 0.6 * neckF;
+
+    ctx.fillStyle = color;
+    if (neckW > 0.5) {
+      ctx.beginPath();
+      ctx.moveTo(L.cx - neckW, barH * 0.4);
+      ctx.bezierCurveTo(
+        L.cx - neckW * 0.9,
+        sag - r * 1.05,
+        L.cx - r,
+        sag - r * 0.6,
+        L.cx - r,
+        sag,
+      );
+      ctx.arc(L.cx, sag, r, Math.PI, 0, true); // bottom half of the bead
+      ctx.bezierCurveTo(
+        L.cx + r,
+        sag - r * 0.6,
+        L.cx + neckW * 0.9,
+        sag - r * 1.05,
+        L.cx + neckW,
+        barH * 0.4,
+      );
+      ctx.closePath();
+      ctx.fill();
+    } else {
+      // thread snapped: free bead, slightly stretched from the release
+      ctx.beginPath();
+      ctx.ellipse(L.cx, sag, r * 0.94, r * 1.08, 0, 0, TAU);
+      ctx.fill();
+    }
+    // specular highlight sells the liquid
+    ctx.beginPath();
+    ctx.ellipse(L.cx - r * 0.32, sag - r * 0.35, r * 0.18, r * 0.26, -0.5, 0, TAU);
+    ctx.fillStyle = "rgba(255,255,255,0.35)";
+    ctx.fill();
+    if (this.symbolsOn() && ft > 0.35) {
+      drawGlyph(ctx, d.colorIdx, L.cx, sag, r * 0.4, "rgba(11,11,16,0.65)");
     }
   }
 
@@ -835,6 +952,11 @@ interface Layout {
 
 function clamp01(x: number): number {
   return Math.max(0, Math.min(1, x));
+}
+
+function easeInOut(t: number): number {
+  const u = clamp01(t);
+  return u * u * (3 - 2 * u);
 }
 
 function easeOutBack(t: number): number {

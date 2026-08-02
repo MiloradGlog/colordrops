@@ -74,6 +74,19 @@ endless, updated spec + autopilot (weaponize = park an overgrown color to
 grab unwanted drops). All 10 levels re-verified winnable; autopilot scores
 actually improved on l9/l10/endless — the rule is more controllable.
 
+## Drop-birth fluidity pass (designer request, 2026-08-02)
+
+"Roughly what I wanted... but more fluid, more clear." Rebuilt the birth:
+- Bar drains toward center with a meniscus gradient; its volume flows into
+  a pendant bead (∛ growth), which sags, necks, and pinches off — satellite
+  droplet + surface-tension recoil bead at detach.
+- Freed drops ring with a decaying prolate↔oblate oscillation on top of
+  velocity stretch; specular highlight on the bead.
+- Clarity: dotted guide line from falling drop to the catch point; the
+  catch marker tints and glows in the incoming drop's color.
+- Correct catches splash tangentially along the rim.
+Frame-by-frame captures verified the neck/pinch renders correctly.
+
 ## Honest status — loop closed 2026-08-02
 
 Everything machine-verifiable is done and verified (28 automated checks).

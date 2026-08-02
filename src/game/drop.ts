@@ -14,7 +14,7 @@ export type DropPhase =
   | "gone";
 
 export const TELEGRAPH_S = 0.55;
-export const FORMING_S = 0.65;
+export const FORMING_S = 0.8; // long enough for the neck pinch-off to read
 export const ABSORB_S = 0.4;
 export const SPLASH_S = 0.5;
 
@@ -71,8 +71,13 @@ export function enter(d: Drop, phase: DropPhase): void {
   d.t = 0;
 }
 
-/** Volume-preserving squash/stretch from velocity: fast fall = tall & thin. */
+/**
+ * Volume-preserving deformation: velocity stretch plus the decaying shape
+ * oscillation a real drop rings with after pinch-off (prolate ↔ oblate).
+ */
 export function stretch(d: Drop): { sx: number; sy: number } {
-  const sy = 1 + Math.min(0.35, Math.abs(d.vy) / 2400);
-  return { sx: 1 / sy, sy };
+  const vel = Math.min(0.3, Math.abs(d.vy) / 2600);
+  const osc = Math.exp(-2.2 * d.t) * 0.22 * Math.sin(16 * d.t + 1.2);
+  const sy = Math.max(0.6, 1 + vel + osc);
+  return { sx: 1 / Math.sqrt(sy), sy };
 }
