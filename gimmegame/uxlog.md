@@ -66,6 +66,14 @@ Fixed:
 4. Safe-area insets — deferred to the Capacitor ship stage (s5-ship) where
    fullscreen/notch actually applies; in-browser play is unaffected.
 
+## Design correction from the designer (2026-08-02)
+
+User feedback: wrong catches must shrink THE SEGMENT THAT GRABS the drop
+(shrinkSelf), not the drop's color. Flipped all shrink-tier levels +
+endless, updated spec + autopilot (weaponize = park an overgrown color to
+grab unwanted drops). All 10 levels re-verified winnable; autopilot scores
+actually improved on l9/l10/endless — the rule is more controllable.
+
 ## Honest status — loop closed 2026-08-02
 
 Everything machine-verifiable is done and verified (28 automated checks).

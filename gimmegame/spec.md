@@ -41,12 +41,12 @@ wheel — an untouched drop, the free dodge.
   everyone else shrinks proportionally.
 - **Wrong catch** — per-level rule, a progression curve (§ levels):
   - `none` (teaching tier): absorbed, no share change.
-  - `shrinkDrop` (standard tier, the v1 default): the DROP's color shrinks
-    by G wherever it actually lives on the ring; others grow
-    proportionally. Decision rationale: this is the weaponizable variant —
-    skilled players deliberately wrong-catch to fix overshoot — chosen for
-    strategic depth over `shrinkSelf` (punish clumsiness), which stays
-    implemented as a level-design knob.
+  - `shrinkSelf` (standard tier — the designer's call, 2026-08-02): the
+    segment that GRABS the drop shrinks by G; others grow proportionally.
+    Whatever grabs it is reduced. Still weaponizable — deliberately park an
+    overgrown color under an unwanted drop to shrink it — and it punishes
+    clumsy catches directly. `shrinkDrop` (the drop's own color shrinks
+    wherever it lives) remains implemented as an alternate level knob.
 - **Scoring**: EVERY absorbed drop counts, correct or wrong (decided per the
   design doc's recommendation — wrong catches have stakes even in teaching
   tiers). Gap fall-throughs don't count: dodging by gap is free but takes

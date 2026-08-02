@@ -57,7 +57,7 @@
       "items": [
         {
           "id": "wrong-catch",
-          "title": "wrongCatch knob none|shrinkDrop|shrinkSelf; shrinkDrop shrinks the drop's color, others grow proportionally",
+          "title": "wrongCatch knob none|shrinkSelf|shrinkDrop; standard tier shrinkSelf: the segment that grabs the drop shrinks, others grow proportionally",
           "done": true,
           "verify": "scripted sim: shrinkDrop wrong catch → drop color −G, sum stays 1; none → shares unchanged"
         },

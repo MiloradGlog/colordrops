@@ -363,9 +363,22 @@ export class GameScene implements Scene {
       this.parkWrong(c); // deliberate wrong catch shrinks the overgrown color
       return;
     }
+    if (this.cfg.wrongCatch === "shrinkSelf") {
+      // weaponize: park an overgrown color under the drop — the catcher shrinks
+      let over = -1;
+      for (let i = 0; i < this.n(); i++) {
+        if (i !== c && this.shares[i]! - this.targets[i]! >= g / 2) {
+          if (over === -1 || this.shares[i]! - this.targets[i]! > this.shares[over]! - this.targets[over]!) over = i;
+        }
+      }
+      if (over !== -1) {
+        this.parkTurn(this.cents[over]!);
+        return;
+      }
+    }
     const gap = this.widestGap();
     if (gap !== null) this.parkTurn(gap);
-    else this.parkWrong(c);
+    else this.parkLeastHarm(c);
   }
 
   private parkTurn(turn: number): void {
@@ -378,6 +391,20 @@ export class GameScene implements Scene {
       if (i !== dropColor && this.shares[i]! > this.shares[widest]!) widest = i;
     }
     this.parkTurn(this.cents[widest]!);
+  }
+
+  /** No gap available: absorb with the color that suffers least from it. */
+  private parkLeastHarm(dropColor: number): void {
+    if (this.cfg.wrongCatch !== "shrinkSelf") {
+      this.parkWrong(dropColor);
+      return;
+    }
+    let best = dropColor === 0 ? 1 : 0;
+    for (let i = 0; i < this.n(); i++) {
+      if (i === dropColor) continue;
+      if (this.shares[i]! - this.targets[i]! > this.shares[best]! - this.targets[best]!) best = i;
+    }
+    this.parkTurn(this.cents[best]!);
   }
 
   /** Center of the widest dark-gap arc in the outer ring, or null if none. */
