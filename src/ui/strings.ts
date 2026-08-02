@@ -12,4 +12,5 @@ export const strings = {
   tapSelect: "tap for level select",
   tapNextBoard: "tap for next board",
   result: (drops: number, par: number) => `${drops} drops · par ${par}`,
+  session: (n: number) => `${n} board${n === 1 ? "" : "s"} cleared this session`,
 } as const;

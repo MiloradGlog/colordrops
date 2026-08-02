@@ -227,6 +227,17 @@ try {
   );
   assert(soundStill === false, "s6/audio: mute survives reload");
 
+  // — accessibility: symbols toggle persists —
+  await page.mouse.click(390 - 80, 34);
+  await page.waitForTimeout(150);
+  const symbolsOn = await page.evaluate(
+    () => JSON.parse(localStorage.getItem("colordrops-save")).settings.symbols,
+  );
+  assert(symbolsOn === true, "a11y: symbols mode toggles and persists");
+  await page.evaluate(() => window.__cd.goto("l1"));
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: "scripts/screenshot-symbols.png" });
+
   assert(errors.length === 0, `no console errors (got: ${errors.join(" | ")})`);
   await browser.close();
   console.log("\nALL VERIFIES PASS");

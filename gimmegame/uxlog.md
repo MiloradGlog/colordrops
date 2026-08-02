@@ -39,19 +39,27 @@ Fixed:
 Caveat: sound *design* (are the blips pleasant? levels balanced?) can't be
 verified headlessly — needs the user's ears. Flagged in backlog.
 
+## Iteration 3 (2026-08-02)
+
+Fixed:
+- Liquid feel: displayShares now follow an underdamped spring (slosh +
+  overshoot on grow/shrink) instead of exponential ease.
+- Colorblind-assist symbols mode (◆ chip on select, persisted): a distinct
+  shape per color stamped on outer segments, inner slices, the forming
+  droplet, and the falling drop — drop→segment pairing no longer depends on
+  hue. Verified toggle persistence + screenshot.
+- Endless won screen shows a session tally (boards cleared).
+
 ## Open backlog (ranked, revisit every iteration)
 
-1. Colorblind readability: 8 hues are distinct but untested for deutan/
-   protan; consider a symbols-on-segments accessibility toggle.
-2. Segment "liquid" wobble on grow (remaining juice item; growth currently
-   eases linearly — a small overshoot spring would sell the liquid feel).
-3. Safe-area insets (notches) — matters at Capacitor stage; telegraph bar
+1. prefers-reduced-motion: disable shake/hit-stop/spring overshoot for users
+   who ask the OS for less motion.
+2. Safe-area insets (notches) — matters at Capacitor stage; telegraph bar
    sits at y=0 which a notch could swallow in standalone/fullscreen.
-4. Endless: session tally (boards cleared this session) on the won screen.
-5. Difficulty tuning needs HUMAN data — autopilot clears everything but
+3. Difficulty tuning needs HUMAN data — autopilot clears everything but
    par-vs-real-play gaps on l8-l10 are guesses. Ask the user after play.
-6. Sound design taste check (blip timbre/levels) — needs human ears.
-7. Rotation feel on a REAL phone (latency, 1:1 mapping, inertia damping) —
+4. Sound design taste check (blip timbre/levels) — needs human ears.
+5. Rotation feel on a REAL phone (latency, 1:1 mapping, inertia damping) —
    cannot be verified headlessly; needs the user's thumb.
 
 ## Honest status

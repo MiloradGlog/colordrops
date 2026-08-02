@@ -6,7 +6,7 @@ const VERSION = 1;
 
 export interface SaveData {
   version: number;
-  settings: { sound: boolean };
+  settings: { sound: boolean; symbols?: boolean };
   progress: { level: number; bestByLevel: Record<string, number>; completions?: number };
   best: number;
 }

@@ -87,6 +87,8 @@ export class GameScene implements Scene {
   private streak = 0;
   private hitStop = 0;
   private shake = 0;
+  private shareVel!: number[];
+  private boardsCleared = 0;
   private trail: { y: number; age: number }[] = [];
   private lockClicks = 0;
   private chordPlayed = false;
@@ -109,6 +111,7 @@ export class GameScene implements Scene {
     this.targets = [...cfg.targets];
     this.shares = new Array(n).fill(1 / n);
     this.displayShares = [...this.shares];
+    this.shareVel = new Array(n).fill(0);
     this.cents = centers(this.targets);
     this.bounds = boundaries(this.targets);
     this.rng = new Rng((cfg.seed ^ 0x9e3779b9) >>> 0);
@@ -192,8 +195,13 @@ export class GameScene implements Scene {
     }
 
     for (let i = 0; i < this.n(); i++) {
-      const s = this.displayShares[i]!;
-      this.displayShares[i] = s + (this.shares[i]! - s) * Math.min(1, dt * 10);
+      // underdamped spring toward the logical share — the overshoot is the
+      // liquid feel (segments slosh into their new size, don't just ease)
+      const x = this.displayShares[i]!;
+      const v = this.shareVel[i]!;
+      const acc = (this.shares[i]! - x) * 90 - v * 12;
+      this.shareVel[i] = v + acc * dt;
+      this.displayShares[i] = x + this.shareVel[i]! * dt;
       this.pulses[i] = Math.max(0, this.pulses[i]! - dt * 3);
     }
     for (const d of this.fallthrough) updateDrop(d, dt, this.gravity(L), Infinity);
@@ -297,6 +305,7 @@ export class GameScene implements Scene {
     if (prev === undefined || this.caught < prev) {
       this.saveData.progress.bestByLevel[key] = this.caught;
     }
+    if (this.cfg.sequence === null) this.boardsCleared++;
     if (this.cfg.sequence !== null) {
       // interstitial slot at a natural break, every 3rd level completion
       const done = (this.saveData.progress.completions ?? 0) + 1;
@@ -513,6 +522,12 @@ export class GameScene implements Scene {
       ctx.closePath();
       ctx.fillStyle = PALETTE[i % PALETTE.length]!;
       ctx.fill();
+      // colorblind assist: a distinct shape per color, hue-independent
+      if (this.symbolsOn() && (e.end - e.start) * TAU * outerR > ringW * 0.9) {
+        const mid = th + ((e.start + e.end) / 2) * TAU;
+        const gr = (outerR + innerRingR) / 2;
+        drawGlyph(ctx, i, cx + Math.cos(mid) * gr, cy + Math.sin(mid) * gr, ringW * 0.24, "rgba(11,11,16,0.65)");
+      }
       // within-tolerance feedback: a bright rim on segments already aligned
       if (
         this.phase === "playing" &&
@@ -562,6 +577,14 @@ export class GameScene implements Scene {
     ctx.strokeStyle = "rgba(11,11,16,0.9)";
     ctx.lineWidth = Math.max(1.5, outerR * 0.015);
     ctx.stroke();
+    if (this.symbolsOn()) {
+      for (let i = 0; i < this.n(); i++) {
+        if (this.targets[i]! < 0.05) continue;
+        const mid = th + ((this.bounds[i]! + this.bounds[i + 1]!) / 2) * TAU;
+        const gr = pieR * 0.62;
+        drawGlyph(ctx, i, cx + Math.cos(mid) * gr, cy + Math.sin(mid) * gr, pieR * 0.075, "rgba(11,11,16,0.65)");
+      }
+    }
     // hairline spokes between target slices — boundaries are the goal posts
     ctx.strokeStyle = "rgba(11,11,16,0.8)";
     ctx.lineWidth = Math.max(1.2, outerR * 0.012);
@@ -616,6 +639,9 @@ export class GameScene implements Scene {
         ctx.ellipse(L.cx, sag + r * 0.2, r * (1 - 0.18 * ft), r * (1 + 0.22 * ft), 0, 0, TAU);
         ctx.fillStyle = color;
         ctx.fill();
+        if (this.symbolsOn() && ft > 0.4) {
+          drawGlyph(ctx, d.colorIdx, L.cx, sag + r * 0.2, r * 0.4, "rgba(11,11,16,0.65)");
+        }
       }
       return;
     }
@@ -642,6 +668,15 @@ export class GameScene implements Scene {
     ctx.fillStyle = color;
     ctx.fill();
     ctx.restore();
+    if (this.symbolsOn()) {
+      ctx.globalAlpha = alpha;
+      drawGlyph(ctx, d.colorIdx, L.cx + wobble, d.y, d.r * 0.42, "rgba(11,11,16,0.65)");
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  private symbolsOn(): boolean {
+    return this.saveData.settings.symbols === true;
   }
 
   private drawParticles(ctx: CanvasRenderingContext2D): void {
@@ -735,6 +770,11 @@ export class GameScene implements Scene {
         y += 32;
       }
     }
+    if (this.cfg.sequence === null && this.boardsCleared > 0) {
+      ctx.fillStyle = "rgba(255,255,255,0.5)";
+      ctx.fillText(strings.session(this.boardsCleared), L.cx, y);
+      y += 32;
+    }
     ctx.fillStyle = "rgba(255,255,255,0.6)";
     ctx.fillText(this.cfg.sequence === null ? strings.tapNextBoard : strings.tapSelect, L.cx, y);
   }
@@ -766,4 +806,69 @@ function hexA(hex: string, alpha: number): string {
     .toString(16)
     .padStart(2, "0");
   return hex + a;
+}
+
+/** One distinct shape per color index — the colorblind-assist vocabulary. */
+export function drawGlyph(
+  ctx: CanvasRenderingContext2D,
+  idx: number,
+  x: number,
+  y: number,
+  r: number,
+  style: string,
+): void {
+  ctx.fillStyle = style;
+  ctx.strokeStyle = style;
+  ctx.lineWidth = Math.max(1.5, r * 0.45);
+  ctx.beginPath();
+  switch (idx % 8) {
+    case 0: // filled circle
+      ctx.arc(x, y, r, 0, TAU);
+      ctx.fill();
+      break;
+    case 1: // triangle
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x + r * 0.9, y + r * 0.7);
+      ctx.lineTo(x - r * 0.9, y + r * 0.7);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 2: // square
+      ctx.fillRect(x - r * 0.8, y - r * 0.8, r * 1.6, r * 1.6);
+      break;
+    case 3: // diamond
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x + r, y);
+      ctx.lineTo(x, y + r);
+      ctx.lineTo(x - r, y);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    case 4: // plus
+      ctx.moveTo(x - r, y);
+      ctx.lineTo(x + r, y);
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x, y + r);
+      ctx.stroke();
+      break;
+    case 5: // ring
+      ctx.arc(x, y, r * 0.8, 0, TAU);
+      ctx.stroke();
+      break;
+    case 6: // bar
+      ctx.fillRect(x - r, y - r * 0.35, r * 2, r * 0.7);
+      break;
+    case 7: // four-point star
+      ctx.moveTo(x, y - r);
+      ctx.lineTo(x + r * 0.35, y - r * 0.35);
+      ctx.lineTo(x + r, y);
+      ctx.lineTo(x + r * 0.35, y + r * 0.35);
+      ctx.lineTo(x, y + r);
+      ctx.lineTo(x - r * 0.35, y + r * 0.35);
+      ctx.lineTo(x - r, y);
+      ctx.lineTo(x - r * 0.35, y - r * 0.35);
+      ctx.closePath();
+      ctx.fill();
+      break;
+  }
 }

@@ -40,6 +40,10 @@ export class SelectScene implements Scene {
     return { x: this.canvas.clientWidth - 34, y: 34, r: 18 };
   }
 
+  private symbolsChip(): { x: number; y: number; r: number } {
+    return { x: this.canvas.clientWidth - 80, y: 34, r: 18 };
+  }
+
   update(): void {
     if (this.input.pointer.justReleased) {
       const { x, y } = this.input.pointer;
@@ -47,6 +51,13 @@ export class SelectScene implements Scene {
       if (Math.hypot(x - s.x, y - s.y) < s.r + 8) {
         this.saveData.settings.sound = !this.saveData.settings.sound;
         this.audio.muted = !this.saveData.settings.sound;
+        save(this.saveData);
+        this.input.endTick();
+        return;
+      }
+      const sy = this.symbolsChip();
+      if (Math.hypot(x - sy.x, y - sy.y) < sy.r + 8) {
+        this.saveData.settings.symbols = this.saveData.settings.symbols !== true;
         save(this.saveData);
         this.input.endTick();
         return;
@@ -178,6 +189,20 @@ export class SelectScene implements Scene {
     ctx.font = `${s.r}px system-ui, sans-serif`;
     ctx.fillStyle = "rgba(255,255,255,0.85)";
     ctx.fillText(this.saveData.settings.sound ? "🔊" : "🔇", s.x, s.y + s.r * 0.36);
+
+    // colorblind-assist symbols toggle
+    const sy = this.symbolsChip();
+    const on = this.saveData.settings.symbols === true;
+    ctx.beginPath();
+    ctx.arc(sy.x, sy.y, sy.r, 0, Math.PI * 2);
+    ctx.fillStyle = on ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.08)";
+    ctx.fill();
+    ctx.strokeStyle = on ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.3)";
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.font = `${sy.r * 0.9}px system-ui, sans-serif`;
+    ctx.fillStyle = "rgba(255,255,255,0.85)";
+    ctx.fillText("◆", sy.x, sy.y + sy.r * 0.32);
   }
 }
 
