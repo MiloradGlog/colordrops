@@ -46,7 +46,8 @@ interface Impact {
   turn: number; // wheel-space angle where the drop landed — rides the rotation
 }
 
-const IMPACT_S = 0.8; // ripple + surface-wobble lifetime
+const IMPACT_S = 0.8; // ripple-ring lifetime
+const SURF_N = 192; // wave-surface samples around the ring (~5px of arc each)
 
 interface Ping {
   t: number; // sonar ping: 1px hairline ring expanding from the wheel
@@ -92,6 +93,11 @@ export class GameScene implements Scene {
   private lockClicks = 0;
   private chordPlayed = false;
   private liquid = new Liquid();
+  // the ring's liquid surface: a 1D wave equation over ring angle (wheel
+  // space). Impacts inject velocity; waves travel both ways and wrap.
+  private surfH = new Float32Array(SURF_N);
+  private surfV = new Float32Array(SURF_N);
+  private surfActive = false;
 
   constructor(
     private input: Input,
@@ -135,6 +141,46 @@ export class GameScene implements Scene {
     this.shake = 0;
     this.lockClicks = 0;
     this.chordPlayed = false;
+    this.surfH.fill(0);
+    this.surfV.fill(0);
+    this.surfActive = false;
+  }
+
+  /** Advance the ring-surface wave equation. Runs on real dt — waves don't freeze. */
+  private stepSurface(dt: number): void {
+    if (!this.surfActive) return;
+    const C = 900; // propagation (sample units²/s²) → ~150 px/s along the arc
+    const K = 30; // restoring pull toward flat
+    const dampen = Math.exp(-2.6 * dt);
+    const h = this.surfH;
+    const v = this.surfV;
+    let maxAbs = 0;
+    for (let i = 0; i < SURF_N; i++) {
+      const lap = h[(i + SURF_N - 1) % SURF_N]! + h[(i + 1) % SURF_N]! - 2 * h[i]!;
+      v[i] = (v[i]! + (C * lap - K * h[i]!) * dt) * dampen;
+    }
+    for (let i = 0; i < SURF_N; i++) {
+      h[i] = Math.max(-16, Math.min(14, h[i]! + v[i]! * dt));
+      const a = Math.abs(h[i]!);
+      if (a > maxAbs) maxAbs = a;
+    }
+    if (maxAbs < 0.15) {
+      this.surfH.fill(0);
+      this.surfV.fill(0);
+      this.surfActive = false;
+    }
+  }
+
+  /** A drop hits the surface: drive a localized downward velocity impulse. */
+  private splashSurface(turn: number): void {
+    const center = turn * SURF_N;
+    const strength = REDUCED_MOTION ? 320 : 640;
+    for (let o = -6; o <= 6; o++) {
+      const i = ((Math.round(center) + o) % SURF_N + SURF_N) % SURF_N;
+      const g = Math.exp(-((o / 2.4) ** 2));
+      this.surfV[i] = this.surfV[i]! - strength * g;
+    }
+    this.surfActive = true;
   }
 
   private n(): number {
@@ -213,6 +259,7 @@ export class GameScene implements Scene {
     }
     for (const d of this.fallthrough) updateDrop(d, dt, this.gravity(L), Infinity);
     this.fallthrough = this.fallthrough.filter((d) => d.y < L.h + 40);
+    this.stepSurface(dt);
     for (const r of this.impacts) r.t += dt;
     this.impacts = this.impacts.filter((r) => r.t < IMPACT_S);
     for (const p of this.pings) p.t += dt;
@@ -272,8 +319,9 @@ export class GameScene implements Scene {
     // every absorbed drop counts, correct or wrong (spec.md → scoring)
     this.caught++;
     this.sessionCaught++;
-    // the splash IS the ring: a ripple pinned to the wheel at the exact
-    // landing angle, plus a local dent in the liquid surface there
+    // the splash IS the ring: the wave surface takes the hit at the exact
+    // landing angle, and a ripple ring pinned to the wheel marks the spot
+    this.splashSurface(topTurn);
     this.impacts.push({ t: 0, colorIdx: d.colorIdx, turn: topTurn });
     enter(d, "absorbed");
     d.y = L.cy - L.outerR;
@@ -552,22 +600,15 @@ export class GameScene implements Scene {
     ctx.fillStyle = UI.track;
     ctx.fill();
 
-    // impact wobble: the liquid surface dents where a drop lands and springs
-    // back with a damped oscillation, localized around the landing angle —
-    // pinned to the wheel, so it rides the rotation
+    // the wave surface: sampled heights over ring angle, interpolated
     const dentAt = (turn: number): number => {
-      let disp = 0;
-      for (const imp of this.impacts) {
-        let du = turn - imp.turn;
-        du = ((du % 1) + 1) % 1;
-        if (du > 0.5) du -= 1;
-        const arcPx = Math.abs(du) * TAU * outerR;
-        const local = Math.exp(-((arcPx / 20) ** 2));
-        disp += -9 * Math.exp(-4.5 * imp.t) * Math.cos(13 * imp.t) * local;
-      }
-      return disp;
+      const f = (((turn % 1) + 1) % 1) * SURF_N;
+      const i0 = Math.floor(f) % SURF_N;
+      const i1 = (i0 + 1) % SURF_N;
+      const fr = f - Math.floor(f);
+      return this.surfH[i0]! * (1 - fr) + this.surfH[i1]! * fr;
     };
-    const wobbling = this.impacts.length > 0;
+    const wobbling = this.surfActive;
 
     // outer segments: matte inks, zero glow
     const extents = this.currentExtents();

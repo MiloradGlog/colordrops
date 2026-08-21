@@ -99,9 +99,19 @@ export class Liquid {
       circles.push({ x: cx, y: d.y - tail, r: R * 0.46 * s });
       circles.push({ x: cx, y: d.y - tail * 1.42, r: R * 0.2 });
     } else if (d.phase === "absorbed") {
+      // the drop merges INTO the ring: sinks and spreads sideways as a puddle
       const t = d.t / 0.4;
+      const sink = d.y + d.r * 0.7 * t;
       const rr = d.r * (1 - t);
-      if (rr > 0.5) circles.push({ x: cx, y: d.y, r: rr });
+      if (rr > 0.5) {
+        circles.push({ x: cx, y: sink, r: rr });
+        const side = d.r * (0.5 + 1.3 * t);
+        const rs = d.r * 0.55 * (1 - t);
+        if (rs > 0.5) {
+          circles.push({ x: cx - side, y: sink + d.r * 0.2 * t, r: rs });
+          circles.push({ x: cx + side, y: sink + d.r * 0.2 * t, r: rs });
+        }
+      }
     }
     return { bands, circles };
   }
