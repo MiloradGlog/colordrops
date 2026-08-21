@@ -606,11 +606,11 @@ export class GameScene implements Scene {
     const extents = this.currentExtents();
     for (let i = 0; i < this.n(); i++) {
       const e = extents[i]!;
-      const w = e.end - e.start - SEP * 2;
+      const w = e.end - e.start;
       if (w <= 0) continue;
       const pulse = this.pulses[i]! * Math.max(2, outerR * 0.025);
-      const a0 = th + (e.start + SEP) * TAU;
-      const a1 = th + (e.end - SEP) * TAU;
+      const a0 = th + e.start * TAU;
+      const a1 = th + e.end * TAU;
       ctx.beginPath();
       ctx.arc(cx, cy, outerR + pulse, a0, a1);
       ctx.arc(cx, cy, innerRingR - pulse * 0.4, a1, a0, true);
@@ -646,11 +646,11 @@ export class GameScene implements Scene {
       }
     }
 
-    // inner disc: the target pie (merges outward at the end)
+    // inner disc: the target pie, seamless (merges outward at the end)
     const pieR = discR + (outerR - discR) * mergeT;
     for (let i = 0; i < this.n(); i++) {
-      const a0 = th + (this.bounds[i]! + SEP) * TAU;
-      const a1 = th + (this.bounds[i + 1]! - SEP) * TAU;
+      const a0 = th + this.bounds[i]! * TAU;
+      const a1 = th + this.bounds[i + 1]! * TAU;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, pieR, a0, a1);

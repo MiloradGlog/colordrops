@@ -11,7 +11,6 @@ import { PALETTE, UI, setType } from "../config";
 import { strings } from "../../ui/strings";
 
 const TAU = Math.PI * 2;
-const SEP = 0.0035;
 
 export class TitleScene implements Scene {
   private t = 0;
@@ -66,8 +65,8 @@ export class TitleScene implements Scene {
     const r = Math.min(w, h) * 0.23;
     const th = this.t * 0.06;
     for (let i = 0; i < 5; i++) {
-      const a0 = th + (i / 5 + SEP) * TAU;
-      const a1 = th + ((i + 1) / 5 - SEP) * TAU;
+      const a0 = th + (i / 5) * TAU;
+      const a1 = th + ((i + 1) / 5) * TAU;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
       ctx.arc(cx, cy, r, a0, a1);
