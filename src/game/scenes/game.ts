@@ -13,16 +13,7 @@ import { ads } from "../../engine/ads";
 import { Rng } from "../../engine/rng";
 import { PALETTE, UI, par, setType } from "../config";
 import { Liquid, rgba } from "../liquid";
-import {
-  boundaries,
-  centers,
-  idealExtents,
-  drawnExtents,
-  segmentAt,
-  isAligned,
-  mod1,
-  type Extent,
-} from "../wheel";
+import { boundaries, centers, segmentAt, isAligned, mod1, type Extent } from "../wheel";
 import { applyCatch, applyShrink } from "../behaviors/catch";
 import { rotate, type Rotatable } from "../behaviors/rotate";
 import { makeDrop, updateDrop, enter, type Drop } from "../drop";
@@ -178,6 +169,30 @@ export class GameScene implements Scene {
     return this.targets.length;
   }
 
+  /**
+   * The ring is ALWAYS closed (designer call): segments sit edge-to-edge in
+   * color order from the same origin as the inner pie, sized by share. No
+   * gaps, no fall-through — every drop lands on some color, and dodging
+   * means choosing the least-bad catcher.
+   */
+  private closedExtents(shares: readonly number[]): Extent[] {
+    const total = shares.reduce((a, b) => a + b, 0) || 1;
+    const out: Extent[] = [];
+    let acc = 0;
+    for (const s of shares) {
+      const w = s / total;
+      out.push({ start: acc, end: acc + w });
+      acc += w;
+    }
+    out[out.length - 1]!.end = 1;
+    return out;
+  }
+
+  private segCenter(i: number): number {
+    const e = this.closedExtents(this.shares)[i]!;
+    return (e.start + e.end) / 2;
+  }
+
   update(dt: number): void {
     const L = this.layout();
     this.wheel.radius = L.outerR;
@@ -292,11 +307,11 @@ export class GameScene implements Scene {
 
   private resolveContact(d: Drop, L: Layout): void {
     const topTurn = mod1((-Math.PI / 2 - this.wheel.theta) / TAU);
-    const extents = drawnExtents(idealExtents(this.cents, this.shares));
+    const extents = this.closedExtents(this.shares);
     const idx = segmentAt(extents, topTurn);
 
     if (idx === -1) {
-      // dark gap: the free dodge — slips through, touches nothing, costs nothing
+      // unreachable with a closed ring — float-edge safety only
       d.behind = true;
       enter(d, "missed");
       d.vy = Math.max(d.vy, 100);
@@ -344,7 +359,7 @@ export class GameScene implements Scene {
     this.lockT = 0;
     this.wheel.locked = true;
     this.wheel.omega = 0;
-    this.lockStart = drawnExtents(idealExtents(this.cents, this.shares));
+    this.lockStart = this.closedExtents(this.shares);
     this.drop = null;
   }
 
@@ -390,7 +405,7 @@ export class GameScene implements Scene {
     const improves = maxDev(applyCatch(this.shares, c, g)) < maxDev(this.shares);
     const stillNeeded = this.targets[c]! - this.shares[c]! >= g / 2;
     if (improves || stillNeeded) {
-      this.parkTurn(this.cents[c]!);
+      this.parkTurn(this.segCenter(c));
       return;
     }
     if (this.cfg.wrongCatch === "shrinkDrop" && this.shares[c]! - this.targets[c]! >= g / 2) {
@@ -411,13 +426,11 @@ export class GameScene implements Scene {
         }
       }
       if (over !== -1) {
-        this.parkTurn(this.cents[over]!);
+        this.parkTurn(this.segCenter(over));
         return;
       }
     }
-    const gap = this.widestGap();
-    if (gap !== null) this.parkTurn(gap);
-    else this.parkLeastHarm(c);
+    this.parkLeastHarm(c);
   }
 
   private parkTurn(turn: number): void {
@@ -429,10 +442,10 @@ export class GameScene implements Scene {
     for (let i = 0; i < this.n(); i++) {
       if (i !== dropColor && this.shares[i]! > this.shares[widest]!) widest = i;
     }
-    this.parkTurn(this.cents[widest]!);
+    this.parkTurn(this.segCenter(widest));
   }
 
-  /** No gap available: absorb with the color that suffers least from it. */
+  /** Every drop lands somewhere: absorb with the color that suffers least. */
   private parkLeastHarm(dropColor: number): void {
     if (this.cfg.wrongCatch !== "shrinkSelf") {
       this.parkWrong(dropColor);
@@ -443,29 +456,7 @@ export class GameScene implements Scene {
       if (i === dropColor) continue;
       if (this.shares[i]! - this.targets[i]! > this.shares[best]! - this.targets[best]!) best = i;
     }
-    this.parkTurn(this.cents[best]!);
-  }
-
-  /** Center of the widest dark-gap arc in the outer ring, or null if none. */
-  private widestGap(): number | null {
-    const ext = drawnExtents(idealExtents(this.cents, this.shares));
-    const edges = ext
-      .filter((e) => e.end > e.start)
-      .map((e) => ({ start: mod1(e.start), width: e.end - e.start }))
-      .sort((a, b) => a.start - b.start);
-    if (edges.length === 0) return null;
-    let best: { center: number; width: number } | null = null;
-    for (let i = 0; i < edges.length; i++) {
-      const cur = edges[i]!;
-      const next = edges[(i + 1) % edges.length]!;
-      const curEnd = cur.start + cur.width;
-      const nextStart = i + 1 < edges.length ? next.start : next.start + 1;
-      const gapW = nextStart - curEnd;
-      if (gapW > 0.015 && (best === null || gapW > best.width)) {
-        best = { center: mod1(curEnd + gapW / 2), width: gapW };
-      }
-    }
-    return best ? best.center : null;
+    this.parkTurn(this.segCenter(best));
   }
 
   /** Debug/verify only. */
@@ -483,7 +474,7 @@ export class GameScene implements Scene {
       targets: [...this.targets],
       shares: [...this.shares],
       centers: [...this.cents],
-      widestGap: this.widestGap(),
+      closed: true, // the ring is always closed — no gaps, no fall-through
       theta: this.wheel.theta,
       caught: this.caught,
       par: this.levelPar,
@@ -555,7 +546,7 @@ export class GameScene implements Scene {
 
   private currentExtents(): Extent[] {
     if (this.phase === "playing") {
-      return drawnExtents(idealExtents(this.cents, this.displayShares));
+      return this.closedExtents(this.displayShares);
     }
     // locking/won: segments click into their exact target extents one by one
     const out: Extent[] = [];

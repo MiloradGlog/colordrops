@@ -46,9 +46,12 @@ fuse, level complete. Score = drops caught (all catches count); lower wins.
 
 ## Catch economy
 
-The drop lands at 12 o'clock. Whatever drawn segment spans that angle
-absorbs it (absorption ripple); a dark gap lets it fall through behind the
-wheel — an untouched drop, the free dodge.
+The drop lands at 12 o'clock. The ring is ALWAYS closed (designer call,
+2026-08-15): segments sit edge-to-edge in color order from the same origin
+as the inner pie, sized by current share — no gaps, ever. Every drop lands
+on some color and is absorbed there. There is no free dodge; "dodging" now
+means choosing the least-bad catcher, which under the shrink rule is the
+weaponized wrong catch.
 
 - **Correct catch** (segment color == drop color): +G to that share,
   everyone else shrinks proportionally.
@@ -60,11 +63,9 @@ wheel — an untouched drop, the free dodge.
     overgrown color under an unwanted drop to shrink it — and it punishes
     clumsy catches directly. `shrinkDrop` (the drop's own color shrinks
     wherever it lives) remains implemented as an alternate level knob.
-- **Scoring**: EVERY absorbed drop counts, correct or wrong (decided per the
-  design doc's recommendation — wrong catches have stakes even in teaching
-  tiers). Gap fall-throughs don't count: dodging by gap is free but takes
-  precision; dodging by wrong-color catch costs a point (and in shrink
-  tiers, has physical consequences).
+- **Scoring**: EVERY drop counts — the closed ring absorbs all of them, so
+  score is total drops seen to alignment. The skill is routing: which color
+  eats each drop, and when a wrong catch is the corrective move.
 - Tolerance ε: per-level knob, generous early, brutal late.
 
 ## Behaviors

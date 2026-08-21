@@ -63,9 +63,9 @@
         },
         {
           "id": "all-catch-score",
-          "title": "Score counts every absorbed drop (correct AND wrong); gap fall-through free",
+          "title": "Score counts every drop — the ring is always closed, every drop is absorbed by some color",
           "done": true,
-          "verify": "headless: wrong catch increments counter; gap fall-through does not"
+          "verify": "headless: closed ring absorbs drops with any rotation; counter increments on every landing"
         }
       ]
     },

@@ -104,22 +104,16 @@ try {
     "s3/wrong-catch: 'none' tier leaves shares untouched",
   );
 
-  // — s3 rules: gap fall-through is free —
-  const gapRun = await page.evaluate(() => {
-    window.__cd.goto("l4"); // shrink tier; gaps exist while misaligned
-    let st = window.__cd.state();
-    const parkGap = () => {
-      st = window.__cd.state();
-      if (st.widestGap !== null) window.__cd.theta(-Math.PI / 2 - st.widestGap * Math.PI * 2);
-    };
-    parkGap();
-    for (let i = 0; i < 60 * 12; i++) {
-      window.__cd.ff(1 / 60);
-      parkGap();
-    }
+  // — s3 rules: the ring is always closed — every drop lands and counts —
+  const closedRun = await page.evaluate(() => {
+    window.__cd.goto("l4"); // shrink tier, mid-misalignment
+    for (let i = 0; i < 60 * 12; i++) window.__cd.ff(1 / 60);
     return window.__cd.state();
   });
-  assert(gapRun.caught === 0, "s3/all-catch-score: gap fall-through does not count");
+  assert(
+    closedRun.closed === true && closedRun.caught >= 2,
+    `s3/all-catch-score: closed ring absorbs every drop (${closedRun.caught} caught in 12s)`,
+  );
   await page.screenshot({ path: "scripts/screenshot-l4.png" });
 
   // — s4: determinism — same level, same drop sequence, every attempt —
