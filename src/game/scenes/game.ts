@@ -90,7 +90,7 @@ export class GameScene implements Scene {
     cfg: RunConfig,
     private onExit: () => void,
   ) {
-    this.wheel = { theta: 0, omega: 0, radius: 100, input, locked: false };
+    this.wheel = { theta: 0, omega: 0, speed: 0, width: 390, input, locked: false };
     this.reset(cfg);
   }
 
@@ -195,7 +195,7 @@ export class GameScene implements Scene {
 
   update(dt: number): void {
     const L = this.layout();
-    this.wheel.radius = L.outerR;
+    this.wheel.width = L.w;
     this.age += dt;
     // hit-stop: the world freezes for a beat on a correct catch; effects keep moving
     const wdt = this.hitStop > 0 ? 0 : dt;
