@@ -39,13 +39,16 @@ export function updateDrop(d: Drop, dt: number, gravity: number, contactY: numbe
     case "telegraph":
       if (d.t >= TELEGRAPH_S) enter(d, "forming");
       return false;
-    case "forming":
-      d.y = d.r * (0.4 + 0.6 * Math.min(1, d.t / FORMING_S)); // bulges down as it fills
+    case "forming": {
+      // the pendant sags well below the ceiling before pinch-off (design: ~90px)
+      const ft = Math.min(1, d.t / FORMING_S);
+      d.y = 6 + 92 * ft * ft;
       if (d.t >= FORMING_S) {
         enter(d, "falling");
         d.vy = 0;
       }
       return false;
+    }
     case "falling": {
       d.vy += gravity * dt;
       d.y += d.vy * dt;

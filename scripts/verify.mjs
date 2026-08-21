@@ -27,7 +27,9 @@ try {
   const debugLogs = [];
   page.on("pageerror", (e) => errors.push(String(e)));
   page.on("console", (m) => {
-    if (m.type() === "error") errors.push(m.text());
+    // resource fetch failures (e.g. Google Fonts offline in the sandbox) are
+    // environmental, not game bugs — the font stack falls back gracefully
+    if (m.type() === "error" && !/Failed to load resource/.test(m.text())) errors.push(m.text());
     if (m.type() === "debug") debugLogs.push(m.text());
   });
   await page.goto(URL);
@@ -173,11 +175,8 @@ try {
   });
   assert(backOut === "won", "s4/select-flow: l1 rewon for navigation test");
   await page.mouse.click(195, 500);
-  await page.waitForTimeout(150);
-  assert(
-    (await page.evaluate(() => window.__cd.state())).screen === "title",
-    "s7/endless-first: tap on a finished level returns to title",
-  );
+  await page.waitForFunction(() => window.__cd.state().screen === "title", null, { timeout: 4000 });
+  assert(true, "s7/endless-first: tap on a finished level returns to title");
   await page.reload();
   await page.waitForFunction(() => typeof window.__cd?.state === "function");
   const saved = await page.evaluate(() => JSON.parse(localStorage.getItem("colorfall-save")));
@@ -201,10 +200,10 @@ try {
   });
   assert(endless.phase === "won", `s5/endless: autopilot wins a random board (${endless.caught} drops)`);
   await page.mouse.click(195, 500);
-  await page.waitForTimeout(150);
+  await page.waitForFunction(() => window.__cd.state().phase === "playing", null, { timeout: 4000 });
   const nextBoard = await page.evaluate(() => window.__cd.state());
   assert(
-    nextBoard.phase === "playing" && nextBoard.caught === 0 && /board 2/.test(nextBoard.name),
+    nextBoard.caught === 0 && /board 2/.test(nextBoard.name),
     "s5/endless: tap after win starts a fresh board",
   );
 
@@ -239,7 +238,7 @@ try {
   // — s6: mute toggle persists —
   await page.evaluate(() => window.__cd.goto("title"));
   await page.waitForTimeout(150);
-  await page.mouse.click(390 - 34, 34);
+  await page.mouse.click(100, 820); // title bottom-left strip = sound toggle
   await page.waitForTimeout(150);
   const soundOff = await page.evaluate(
     () => JSON.parse(localStorage.getItem("colorfall-save")).settings.sound,
@@ -253,7 +252,7 @@ try {
   assert(soundStill === false, "s6/audio: mute survives reload");
 
   // — accessibility: symbols toggle persists —
-  await page.mouse.click(390 - 80, 34);
+  await page.mouse.click(290, 820); // title bottom-right strip = symbols toggle
   await page.waitForTimeout(150);
   const symbolsOn = await page.evaluate(
     () => JSON.parse(localStorage.getItem("colorfall-save")).settings.symbols,

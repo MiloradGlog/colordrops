@@ -87,6 +87,29 @@ actually improved on l9/l10/endless — the rule is more controllable.
 - Correct catches splash tangentially along the rim.
 Frame-by-frame captures verified the neck/pinch renders correctly.
 
+## Designer restyle implemented (2026-08-15)
+
+The designer's two Claude Design projects landed and were implemented:
+- **Instrument style** ("Colorfall Directions", direction 3b→4→8): graphite
+  #101214 / track #1a1d20, muted ink palette (#b8433c #c9932f #3f8f5c
+  #3d78b8 #75589f + 3 extensions), IBM Plex Mono everywhere, 1px hairlines,
+  zero glow on UI. Aligned feedback = hairline arcs floating outside the
+  ring over each aligned color's target span + ALN k/N. Win = sonar-ping
+  hairline rings per snap, double hairline halo on the fused disc, NEW BEST
+  as a green hairline-boxed tag, over-par neutral grey. Title/won screens
+  per mocks 4a/4c (lifetime stats row, session line). Arrow and guide line
+  REMOVED per the designer — the liquid color is the telegraph.
+- **Honey liquid** ("Honey Drip" metaball engine): white-mask shapes →
+  SVG goo filter (blur 3 + alpha threshold 20/-8, canvas blur+contrast
+  fallback, plain-shape fallback for Safari) → vertical shade gradient →
+  blurred specular → soft color glow (the one glowing element). Phases:
+  creep-in from both edges with leading beads → center gather → pendant
+  circle-chain with sag to ~98px and thread-thin pinch-off → comet-tail
+  teardrop fall → elliptical rim ripples. Sim's forming y deepened to match
+  so pinch-off hands over to gravity with no visual jump.
+- New debug hook __cd.pause() for frozen-frame captures; verify updated for
+  the new title toggles and font-fetch offline noise. All checks pass.
+
 ## Honest status — loop closed 2026-08-02
 
 Everything machine-verifiable is done and verified (28 automated checks).

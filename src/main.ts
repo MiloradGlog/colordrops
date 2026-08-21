@@ -40,9 +40,13 @@ function startRun(cfg: RunConfig): void {
 
 showTitle();
 
+let paused = false; // debug: freeze the sim while the render loop keeps painting
+
 startLoop(
   {
-    update: (dt) => scenes.update(dt),
+    update: (dt) => {
+      if (!paused) scenes.update(dt);
+    },
     render: (ctx, alpha) => scenes.render(ctx, alpha),
   },
   canvas,
@@ -57,6 +61,7 @@ declare global {
     __cd: {
       goto(id: string): void;
       theta(rad: number): void;
+      pause(on: boolean): void;
       auto(on: boolean): void;
       ff(seconds: number): void;
       state(): Record<string, unknown>;
@@ -82,6 +87,9 @@ window.__cd = {
   },
   theta(rad: number) {
     current?.setTheta(rad);
+  },
+  pause(on: boolean) {
+    paused = on;
   },
   auto(on: boolean) {
     autopilotWanted = on;

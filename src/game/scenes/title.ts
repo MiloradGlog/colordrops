@@ -1,16 +1,17 @@
-// v3 endless-first: the boot screen. One tap from here to playing — no
-// level grid (the handcrafted levels stay in the codebase for a later
-// update). Wordmark, animated logo wheel, best score, sound/symbols chips.
+// The boot screen, Instrument language (designer mock 4a): mono wordmark,
+// a calm full pie, lifetime stats with hairline dividers, TAP TO PLAY,
+// text-row toggles at the bottom. One tap from here to playing.
 
 import type { Scene } from "../../engine/scene";
 import type { Input } from "../../engine/input";
 import type { SaveData } from "../../engine/save";
 import type { Audio } from "../../engine/audio";
 import { save } from "../../engine/save";
-import { PALETTE } from "../config";
+import { PALETTE, UI, setType } from "../config";
 import { strings } from "../../ui/strings";
 
 const TAU = Math.PI * 2;
+const SEP = 0.0035;
 
 export class TitleScene implements Scene {
   private t = 0;
@@ -23,26 +24,20 @@ export class TitleScene implements Scene {
     private onPlay: () => void,
   ) {}
 
-  private soundChip(): { x: number; y: number; r: number } {
-    return { x: this.canvas.clientWidth - 34, y: 34, r: 18 };
-  }
-
-  private symbolsChip(): { x: number; y: number; r: number } {
-    return { x: this.canvas.clientWidth - 80, y: 34, r: 18 };
-  }
-
   update(dt: number): void {
     this.t += dt;
     if (this.input.pointer.justReleased) {
       const { x, y } = this.input.pointer;
-      const s = this.soundChip();
-      const sy = this.symbolsChip();
-      if (Math.hypot(x - s.x, y - s.y) < s.r + 8) {
-        this.saveData.settings.sound = !this.saveData.settings.sound;
-        this.audio.muted = !this.saveData.settings.sound;
-        save(this.saveData);
-      } else if (Math.hypot(x - sy.x, y - sy.y) < sy.r + 8) {
-        this.saveData.settings.symbols = this.saveData.settings.symbols !== true;
+      const w = this.canvas.clientWidth;
+      const h = this.canvas.clientHeight;
+      if (y > h - 52) {
+        // bottom strip: left half toggles sound, right half toggles symbols
+        if (x < w / 2) {
+          this.saveData.settings.sound = !this.saveData.settings.sound;
+          this.audio.muted = !this.saveData.settings.sound;
+        } else {
+          this.saveData.settings.symbols = this.saveData.settings.symbols !== true;
+        }
         save(this.saveData);
       } else {
         this.onPlay();
@@ -54,74 +49,77 @@ export class TitleScene implements Scene {
   render(ctx: CanvasRenderingContext2D): void {
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
-    ctx.fillStyle = "#0b0b10";
+    ctx.fillStyle = UI.bg;
     ctx.fillRect(0, 0, w, h);
-    const g = ctx.createRadialGradient(w / 2, h * 0.45, 20, w / 2, h * 0.45, h * 0.8);
-    g.addColorStop(0, "rgba(60,60,90,0.18)");
-    g.addColorStop(1, "rgba(0,0,0,0)");
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, w, h);
+    ctx.textAlign = "center";
 
-    // logo: slowly turning pie, droplet bobbing above it
+    ctx.fillStyle = UI.text;
+    setType(ctx, 600, 22, 6);
+    ctx.fillText(strings.title, w / 2, h * 0.18);
+    ctx.fillStyle = UI.muted;
+    setType(ctx, 400, 9, 2);
+    ctx.fillText(strings.subtitle, w / 2, h * 0.18 + 24);
+
+    // the pie, breathing slowly — five muted inks, hairline border
     const cx = w / 2;
     const cy = h * 0.42;
-    const r = Math.min(w, h) * 0.16;
-    const th = this.t * 0.25;
+    const r = Math.min(w, h) * 0.23;
+    const th = this.t * 0.06;
     for (let i = 0; i < 5; i++) {
+      const a0 = th + (i / 5 + SEP) * TAU;
+      const a1 = th + ((i + 1) / 5 - SEP) * TAU;
       ctx.beginPath();
       ctx.moveTo(cx, cy);
-      ctx.arc(cx, cy, r, th + (i / 5) * TAU, th + ((i + 1) / 5) * TAU);
+      ctx.arc(cx, cy, r, a0, a1);
       ctx.closePath();
       ctx.fillStyle = PALETTE[i]!;
       ctx.fill();
     }
-    const bob = Math.sin(this.t * 2.2) * r * 0.08;
     ctx.beginPath();
-    ctx.ellipse(cx, cy - r * 1.45 + bob, r * 0.16, r * 0.2, 0, 0, TAU);
-    ctx.fillStyle = PALETTE[0]!;
-    ctx.shadowColor = PALETTE[0]!;
-    ctx.shadowBlur = 12;
-    ctx.fill();
-    ctx.shadowBlur = 0;
+    ctx.arc(cx, cy, r + 2, 0, TAU);
+    ctx.strokeStyle = UI.hair(0.2);
+    ctx.lineWidth = 1;
+    ctx.stroke();
 
-    ctx.textAlign = "center";
-    ctx.fillStyle = "#fff";
-    ctx.font = `800 ${Math.max(30, h * 0.05)}px system-ui, sans-serif`;
-    ctx.fillText(strings.title, cx, h * 0.2);
-
-    const pulse = 0.55 + 0.35 * (0.5 + Math.sin(this.t * 3) / 2);
-    ctx.fillStyle = `rgba(255,255,255,${pulse})`;
-    ctx.font = `600 ${Math.max(17, h * 0.026)}px system-ui, sans-serif`;
-    ctx.fillText(strings.tapPlay, cx, h * 0.68);
-
+    // lifetime stats: BEST / BOARD / DROPS with hairline dividers
     const best = this.saveData.progress.bestByLevel["endless"];
-    if (best !== undefined) {
-      ctx.fillStyle = "rgba(255,255,255,0.5)";
-      ctx.font = `500 ${Math.max(14, h * 0.02)}px system-ui, sans-serif`;
-      ctx.fillText(strings.bestBoard(best), cx, h * 0.74);
-    }
+    const stats: [string, string][] = [
+      ["BEST", best === undefined ? "—" : String(best)],
+      ["BOARD", String(this.saveData.progress.totalBoards ?? 0)],
+      ["DROPS", String(this.saveData.progress.totalDrops ?? 0)],
+    ];
+    const sy = h * 0.61;
+    const colW = 78;
+    const x0 = cx - colW;
+    stats.forEach(([label, value], i) => {
+      const x = x0 + i * colW;
+      ctx.fillStyle = UI.muted;
+      setType(ctx, 400, 9, 1);
+      ctx.fillText(label, x, sy);
+      ctx.fillStyle = UI.text;
+      setType(ctx, 600, 14, 0);
+      ctx.fillText(value, x, sy + 20);
+      if (i > 0) {
+        ctx.beginPath();
+        ctx.moveTo(x - colW / 2, sy - 10);
+        ctx.lineTo(x - colW / 2, sy + 20);
+        ctx.strokeStyle = UI.hair(0.12);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+    });
 
-    ctx.fillStyle = "rgba(255,255,255,0.4)";
-    ctx.font = `500 ${Math.max(11, h * 0.014)}px system-ui, sans-serif`;
-    ctx.fillText(strings.tagline, cx, h * 0.965);
+    const pulse = 0.6 + 0.4 * (0.5 + Math.sin(this.t * 2.4) / 2);
+    ctx.fillStyle = UI.hair(pulse);
+    setType(ctx, 600, 11, 5);
+    ctx.fillText(strings.tapPlay, cx, h * 0.75);
 
-    // chips (sound + symbols)
-    const s = this.soundChip();
-    const sy = this.symbolsChip();
-    for (const [chip, on, glyph] of [
-      [s, this.saveData.settings.sound, this.saveData.settings.sound ? "🔊" : "🔇"],
-      [sy, this.saveData.settings.symbols === true, "◆"],
-    ] as const) {
-      ctx.beginPath();
-      ctx.arc(chip.x, chip.y, chip.r, 0, TAU);
-      ctx.fillStyle = on ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.08)";
-      ctx.fill();
-      ctx.strokeStyle = on ? "rgba(255,255,255,0.7)" : "rgba(255,255,255,0.3)";
-      ctx.lineWidth = 1.5;
-      ctx.stroke();
-      ctx.font = `${chip.r * 0.9}px system-ui, sans-serif`;
-      ctx.fillStyle = "rgba(255,255,255,0.85)";
-      ctx.fillText(glyph, chip.x, chip.y + chip.r * 0.32);
-    }
+    // bottom toggles (tap targets: left/right halves of the strip)
+    ctx.fillStyle = UI.muted;
+    setType(ctx, 400, 9, 1);
+    const soundOn = this.saveData.settings.sound;
+    const symOn = this.saveData.settings.symbols === true;
+    ctx.fillText(`♪ SOUND ${soundOn ? "ON" : "OFF"}`, w * 0.28, h - 26);
+    ctx.fillText(`◆ SYMBOLS ${symOn ? "ON" : "OFF"}`, w * 0.71, h - 26);
   }
 }

@@ -1,18 +1,18 @@
-// Keyed strings table from day one (game-universals). English only for now.
+// Keyed strings table from day one (game-universals). All-caps mono is the
+// Instrument voice. English only for now.
 
 export const strings = {
   title: "COLORFALL",
-  tagline: "hold & drag to turn · catch drops with their color",
+  subtitle: "THE CIRCLE ALIGNMENT GAME",
+  tagline: "HOLD + DRAG TO ROTATE",
+  tapPlay: "TAP TO PLAY",
   drops: (n: number) => `DROPS ${n}`,
   par: (n: number) => `PAR ${n}`,
   best: (n: number) => `BEST ${n}`,
-  locked: "LOCKED!",
-  newBest: "NEW BEST!",
-  aligned: (k: number, n: number) => `ALIGNED ${k}/${n}`,
-  tapSelect: "tap for level select",
-  tapNextBoard: "tap for next board",
-  tapPlay: "TAP TO PLAY",
-  bestBoard: (n: number) => `BEST BOARD · ${n} drops`,
-  result: (drops: number, par: number) => `${drops} drops · par ${par}`,
-  session: (n: number) => `${n} board${n === 1 ? "" : "s"} cleared this session`,
+  locked: "LOCKED",
+  newBest: "NEW BEST",
+  tapSelect: "TAP FOR LEVEL SELECT",
+  tapNextBoard: "TAP FOR NEXT BOARD",
+  session: (drops: number, boards: number) =>
+    `SESSION ${drops} DROPS / ${boards} BOARD${boards === 1 ? "" : "S"}`,
 } as const;

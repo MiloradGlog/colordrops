@@ -8,7 +8,13 @@ const VERSION = 1;
 export interface SaveData {
   version: number;
   settings: { sound: boolean; symbols?: boolean };
-  progress: { level: number; bestByLevel: Record<string, number>; completions?: number };
+  progress: {
+    level: number;
+    bestByLevel: Record<string, number>;
+    completions?: number;
+    totalDrops?: number;
+    totalBoards?: number;
+  };
   best: number;
 }
 
