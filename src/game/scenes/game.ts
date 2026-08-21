@@ -40,19 +40,13 @@ const REDUCED_MOTION =
   typeof window !== "undefined" &&
   (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
 
-interface Ripple {
+interface Impact {
   t: number;
   colorIdx: number;
+  turn: number; // wheel-space angle where the drop landed — rides the rotation
 }
 
-interface Particle {
-  x: number;
-  y: number;
-  vx: number;
-  vy: number;
-  t: number;
-  colorIdx: number;
-}
+const IMPACT_S = 0.8; // ripple + surface-wobble lifetime
 
 interface Ping {
   t: number; // sonar ping: 1px hairline ring expanding from the wheel
@@ -83,8 +77,7 @@ export class GameScene implements Scene {
   private lockT = 0;
   private lockStart: Extent[] = [];
   private pulses!: number[];
-  private ripples: Ripple[] = [];
-  private particles: Particle[] = [];
+  private impacts: Impact[] = [];
   private pings: Ping[] = [];
   private fxRng = new Rng(0xfeedface); // presentation-only randomness, still seeded
   private tapStart: { x: number; y: number } | null = null;
@@ -135,8 +128,7 @@ export class GameScene implements Scene {
     this.age = 0;
     this.lockT = 0;
     this.pulses = new Array(n).fill(0);
-    this.ripples = [];
-    this.particles = [];
+    this.impacts = [];
     this.pings = [];
     this.streak = 0;
     this.hitStop = 0;
@@ -221,17 +213,10 @@ export class GameScene implements Scene {
     }
     for (const d of this.fallthrough) updateDrop(d, dt, this.gravity(L), Infinity);
     this.fallthrough = this.fallthrough.filter((d) => d.y < L.h + 40);
-    for (const r of this.ripples) r.t += dt;
-    this.ripples = this.ripples.filter((r) => r.t < 0.8);
+    for (const r of this.impacts) r.t += dt;
+    this.impacts = this.impacts.filter((r) => r.t < IMPACT_S);
     for (const p of this.pings) p.t += dt;
     this.pings = this.pings.filter((p) => p.t < 0.7);
-    for (const p of this.particles) {
-      p.t += dt;
-      p.vy += 1800 * dt;
-      p.x += p.vx * dt;
-      p.y += p.vy * dt;
-    }
-    this.particles = this.particles.filter((p) => p.t < 0.6);
 
     this.input.endTick();
   }
@@ -287,7 +272,9 @@ export class GameScene implements Scene {
     // every absorbed drop counts, correct or wrong (spec.md → scoring)
     this.caught++;
     this.sessionCaught++;
-    this.ripples.push({ t: 0, colorIdx: d.colorIdx });
+    // the splash IS the ring: a ripple pinned to the wheel at the exact
+    // landing angle, plus a local dent in the liquid surface there
+    this.impacts.push({ t: 0, colorIdx: d.colorIdx, turn: topTurn });
     enter(d, "absorbed");
     d.y = L.cy - L.outerR;
 
@@ -296,17 +283,14 @@ export class GameScene implements Scene {
       this.pulses[idx] = 1;
       this.streak++;
       this.audio.blip(this.streak);
-      this.spawnRimSplash(d, L);
       if (!REDUCED_MOTION) this.hitStop = 0.05;
     } else if (this.cfg.wrongCatch === "shrinkDrop") {
       this.shares = applyShrink(this.shares, d.colorIdx, this.cfg.growth);
-      this.spawnSplash(d, L); // shrink is loud: burst in the shrinking color
       this.streak = 0;
       this.audio.thud();
       if (!REDUCED_MOTION) this.shake = 1;
     } else if (this.cfg.wrongCatch === "shrinkSelf") {
       this.shares = applyShrink(this.shares, idx, this.cfg.growth);
-      this.spawnSplash(d, L);
       this.streak = 0;
       this.audio.thud();
       if (!REDUCED_MOTION) this.shake = 1;
@@ -352,39 +336,6 @@ export class GameScene implements Scene {
 
   private soundChip(L: Layout): { x: number; y: number; r: number } {
     return { x: L.w - 30, y: L.h * 0.045, r: 17 };
-  }
-
-  /** Correct catch: liquid spreads along the rim — tangent splash, not a burst. */
-  private spawnRimSplash(d: Drop, L: Layout): void {
-    const y = L.cy - L.outerR - 2;
-    for (let i = 0; i < 6; i++) {
-      const dir = i % 2 === 0 ? 1 : -1;
-      const sp = 90 + this.fxRng.next() * 130;
-      this.particles.push({
-        x: L.cx + dir * (2 + this.fxRng.next() * 5),
-        y,
-        vx: dir * sp,
-        vy: -30 - this.fxRng.next() * 60,
-        t: 0.15,
-        colorIdx: d.colorIdx,
-      });
-    }
-  }
-
-  private spawnSplash(d: Drop, L: Layout): void {
-    const y = L.cy - L.outerR - d.r * 0.4;
-    for (let i = 0; i < 9; i++) {
-      const a = -Math.PI / 2 + (this.fxRng.next() - 0.5) * 2.2;
-      const sp = 220 + this.fxRng.next() * 260;
-      this.particles.push({
-        x: L.cx + Math.cos(a) * 4,
-        y,
-        vx: Math.cos(a) * sp,
-        vy: Math.sin(a) * sp,
-        t: 0,
-        colorIdx: d.colorIdx,
-      });
-    }
   }
 
   /**
@@ -540,7 +491,7 @@ export class GameScene implements Scene {
     }
     for (const f of this.fallthrough) this.drawFallthrough(ctx, L, f);
     this.drawWheel(ctx, L);
-    this.drawRipples(ctx, L);
+    this.drawImpacts(ctx, L);
     this.drawPings(ctx, L);
     if (d) {
       this.liquid.render(
@@ -555,7 +506,6 @@ export class GameScene implements Scene {
         drawGlyph(ctx, d.colorIdx, L.cx, d.y, d.r * 0.42, "rgba(16,18,20,0.7)");
       }
     }
-    this.drawParticles(ctx);
     this.drawHud(ctx, L);
     if (this.phase === "won") this.drawWon(ctx, L);
     ctx.restore();
@@ -602,7 +552,24 @@ export class GameScene implements Scene {
     ctx.fillStyle = UI.track;
     ctx.fill();
 
-    // outer segments: matte inks, hairline separator gaps, zero glow
+    // impact wobble: the liquid surface dents where a drop lands and springs
+    // back with a damped oscillation, localized around the landing angle —
+    // pinned to the wheel, so it rides the rotation
+    const dentAt = (turn: number): number => {
+      let disp = 0;
+      for (const imp of this.impacts) {
+        let du = turn - imp.turn;
+        du = ((du % 1) + 1) % 1;
+        if (du > 0.5) du -= 1;
+        const arcPx = Math.abs(du) * TAU * outerR;
+        const local = Math.exp(-((arcPx / 20) ** 2));
+        disp += -9 * Math.exp(-4.5 * imp.t) * Math.cos(13 * imp.t) * local;
+      }
+      return disp;
+    };
+    const wobbling = this.impacts.length > 0;
+
+    // outer segments: matte inks, zero glow
     const extents = this.currentExtents();
     for (let i = 0; i < this.n(); i++) {
       const e = extents[i]!;
@@ -612,8 +579,21 @@ export class GameScene implements Scene {
       const a0 = th + e.start * TAU;
       const a1 = th + e.end * TAU;
       ctx.beginPath();
-      ctx.arc(cx, cy, outerR + pulse, a0, a1);
-      ctx.arc(cx, cy, innerRingR - pulse * 0.4, a1, a0, true);
+      if (wobbling) {
+        const steps = Math.max(3, Math.ceil((a1 - a0) / 0.03));
+        for (let s = 0; s <= steps; s++) {
+          const a = a0 + ((a1 - a0) * s) / steps;
+          const r = outerR + pulse + dentAt((a - th) / TAU);
+          const px = cx + Math.cos(a) * r;
+          const py = cy + Math.sin(a) * r;
+          if (s === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.arc(cx, cy, innerRingR - pulse * 0.4, a1, a0, true);
+      } else {
+        ctx.arc(cx, cy, outerR + pulse, a0, a1);
+        ctx.arc(cx, cy, innerRingR - pulse * 0.4, a1, a0, true);
+      }
       ctx.closePath();
       ctx.fillStyle = PALETTE[i % PALETTE.length]!;
       ctx.fill();
@@ -694,16 +674,34 @@ export class GameScene implements Scene {
     }
   }
 
-  private drawRipples(ctx: CanvasRenderingContext2D, L: Layout): void {
-    // elliptical rings settling on the rim where the drop landed
-    for (const r of this.ripples) {
-      const t = r.t / 0.8;
-      const rx = 10 + t * 44;
+  private drawImpacts(ctx: CanvasRenderingContext2D, L: Layout): void {
+    // elliptical rings settling on the rim AT the landing spot, tangent to
+    // the ring and rotating with the wheel
+    for (const imp of this.impacts) {
+      const t = imp.t / IMPACT_S;
+      const ang = this.wheel.theta + imp.turn * TAU;
+      const px = L.cx + Math.cos(ang) * L.outerR;
+      const py = L.cy + Math.sin(ang) * L.outerR;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate(ang + Math.PI / 2);
+      const color = PALETTE[imp.colorIdx % PALETTE.length]!;
+      const rx = 8 + t * 40;
       ctx.beginPath();
-      ctx.ellipse(L.cx, L.cy - L.outerR, rx, rx * 0.32, 0, 0, TAU);
-      ctx.strokeStyle = rgba(PALETTE[r.colorIdx % PALETTE.length]!, (1 - t) * 0.8);
+      ctx.ellipse(0, 0, rx, rx * 0.3, 0, 0, TAU);
+      ctx.strokeStyle = rgba(color, (1 - t) * 0.8);
       ctx.lineWidth = 1.5 * (1 - t) + 0.5;
       ctx.stroke();
+      const t2 = Math.max(0, t - 0.18);
+      if (t2 > 0) {
+        const rx2 = 8 + t2 * 52;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, rx2, rx2 * 0.3, 0, 0, TAU);
+        ctx.strokeStyle = rgba(color, (1 - t2) * 0.4);
+        ctx.lineWidth = 1;
+        ctx.stroke();
+      }
+      ctx.restore();
     }
   }
 
@@ -719,15 +717,6 @@ export class GameScene implements Scene {
     }
   }
 
-  private drawParticles(ctx: CanvasRenderingContext2D): void {
-    for (const p of this.particles) {
-      const t = p.t / 0.6;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, 3 * (1 - t) + 0.5, 0, TAU);
-      ctx.fillStyle = rgba(PALETTE[p.colorIdx % PALETTE.length]!, 1 - t);
-      ctx.fill();
-    }
-  }
 
   private drawChip(
     ctx: CanvasRenderingContext2D,
