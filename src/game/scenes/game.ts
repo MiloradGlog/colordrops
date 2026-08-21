@@ -679,16 +679,19 @@ export class GameScene implements Scene {
     ctx.lineWidth = 1;
     ctx.stroke();
 
-    // won: the double hairline halo is the only celebration
+    // won: the double hairline halo is the only celebration — it breathes
+    // gently while idle, the outer ring trailing the inner by a beat
     if (this.phase === "won") {
+      const p1 = REDUCED_MOTION ? 0 : Math.sin(this.age * 1.7);
+      const p2 = REDUCED_MOTION ? 0 : Math.sin(this.age * 1.7 - 0.9);
       ctx.beginPath();
-      ctx.arc(cx, cy, outerR + 7, 0, TAU);
-      ctx.strokeStyle = UI.hair(0.5);
+      ctx.arc(cx, cy, outerR + 7 + p1 * 2, 0, TAU);
+      ctx.strokeStyle = UI.hair(0.5 + 0.13 * p1);
       ctx.lineWidth = 1;
       ctx.stroke();
       ctx.beginPath();
-      ctx.arc(cx, cy, outerR + 13, 0, TAU);
-      ctx.strokeStyle = UI.hair(0.14);
+      ctx.arc(cx, cy, outerR + 13 + p2 * 3.5, 0, TAU);
+      ctx.strokeStyle = UI.hair(0.14 + 0.08 * p2);
       ctx.stroke();
     }
   }
