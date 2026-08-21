@@ -40,13 +40,6 @@ const REDUCED_MOTION =
   typeof window !== "undefined" &&
   (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false);
 
-interface Impact {
-  t: number;
-  colorIdx: number;
-  turn: number; // wheel-space angle where the drop landed — rides the rotation
-}
-
-const IMPACT_S = 0.8; // ripple-ring lifetime
 const SURF_N = 192; // wave-surface samples around the ring (~5px of arc each)
 
 interface Ping {
@@ -78,7 +71,6 @@ export class GameScene implements Scene {
   private lockT = 0;
   private lockStart: Extent[] = [];
   private pulses!: number[];
-  private impacts: Impact[] = [];
   private pings: Ping[] = [];
   private fxRng = new Rng(0xfeedface); // presentation-only randomness, still seeded
   private tapStart: { x: number; y: number } | null = null;
@@ -134,7 +126,6 @@ export class GameScene implements Scene {
     this.age = 0;
     this.lockT = 0;
     this.pulses = new Array(n).fill(0);
-    this.impacts = [];
     this.pings = [];
     this.streak = 0;
     this.hitStop = 0;
@@ -149,9 +140,9 @@ export class GameScene implements Scene {
   /** Advance the ring-surface wave equation. Runs on real dt — waves don't freeze. */
   private stepSurface(dt: number): void {
     if (!this.surfActive) return;
-    const C = 900; // propagation (sample units²/s²) → ~150 px/s along the arc
+    const C = 520; // propagation — waves stay near the impact
     const K = 30; // restoring pull toward flat
-    const dampen = Math.exp(-2.6 * dt);
+    const dampen = Math.exp(-3.2 * dt);
     const h = this.surfH;
     const v = this.surfV;
     let maxAbs = 0;
@@ -175,9 +166,9 @@ export class GameScene implements Scene {
   private splashSurface(turn: number): void {
     const center = turn * SURF_N;
     const strength = REDUCED_MOTION ? 320 : 640;
-    for (let o = -6; o <= 6; o++) {
+    for (let o = -4; o <= 4; o++) {
       const i = ((Math.round(center) + o) % SURF_N + SURF_N) % SURF_N;
-      const g = Math.exp(-((o / 2.4) ** 2));
+      const g = Math.exp(-((o / 1.6) ** 2));
       this.surfV[i] = this.surfV[i]! - strength * g;
     }
     this.surfActive = true;
@@ -260,8 +251,6 @@ export class GameScene implements Scene {
     for (const d of this.fallthrough) updateDrop(d, dt, this.gravity(L), Infinity);
     this.fallthrough = this.fallthrough.filter((d) => d.y < L.h + 40);
     this.stepSurface(dt);
-    for (const r of this.impacts) r.t += dt;
-    this.impacts = this.impacts.filter((r) => r.t < IMPACT_S);
     for (const p of this.pings) p.t += dt;
     this.pings = this.pings.filter((p) => p.t < 0.7);
 
@@ -322,7 +311,6 @@ export class GameScene implements Scene {
     // the splash IS the ring: the wave surface takes the hit at the exact
     // landing angle, and a ripple ring pinned to the wheel marks the spot
     this.splashSurface(topTurn);
-    this.impacts.push({ t: 0, colorIdx: d.colorIdx, turn: topTurn });
     enter(d, "absorbed");
     d.y = L.cy - L.outerR;
 
@@ -539,7 +527,6 @@ export class GameScene implements Scene {
     }
     for (const f of this.fallthrough) this.drawFallthrough(ctx, L, f);
     this.drawWheel(ctx, L);
-    this.drawImpacts(ctx, L);
     this.drawPings(ctx, L);
     if (d) {
       this.liquid.render(
@@ -712,37 +699,6 @@ export class GameScene implements Scene {
       ctx.arc(cx, cy, outerR + 13, 0, TAU);
       ctx.strokeStyle = UI.hair(0.14);
       ctx.stroke();
-    }
-  }
-
-  private drawImpacts(ctx: CanvasRenderingContext2D, L: Layout): void {
-    // elliptical rings settling on the rim AT the landing spot, tangent to
-    // the ring and rotating with the wheel
-    for (const imp of this.impacts) {
-      const t = imp.t / IMPACT_S;
-      const ang = this.wheel.theta + imp.turn * TAU;
-      const px = L.cx + Math.cos(ang) * L.outerR;
-      const py = L.cy + Math.sin(ang) * L.outerR;
-      ctx.save();
-      ctx.translate(px, py);
-      ctx.rotate(ang + Math.PI / 2);
-      const color = PALETTE[imp.colorIdx % PALETTE.length]!;
-      const rx = 8 + t * 40;
-      ctx.beginPath();
-      ctx.ellipse(0, 0, rx, rx * 0.3, 0, 0, TAU);
-      ctx.strokeStyle = rgba(color, (1 - t) * 0.8);
-      ctx.lineWidth = 1.5 * (1 - t) + 0.5;
-      ctx.stroke();
-      const t2 = Math.max(0, t - 0.18);
-      if (t2 > 0) {
-        const rx2 = 8 + t2 * 52;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, rx2, rx2 * 0.3, 0, 0, TAU);
-        ctx.strokeStyle = rgba(color, (1 - t2) * 0.4);
-        ctx.lineWidth = 1;
-        ctx.stroke();
-      }
-      ctx.restore();
     }
   }
 

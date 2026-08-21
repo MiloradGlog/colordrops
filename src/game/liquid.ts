@@ -105,7 +105,7 @@ export class Liquid {
       const rr = d.r * (1 - t);
       if (rr > 0.5) {
         circles.push({ x: cx, y: sink, r: rr });
-        const side = d.r * (0.5 + 1.3 * t);
+        const side = d.r * (0.4 + 0.85 * t);
         const rs = d.r * 0.55 * (1 - t);
         if (rs > 0.5) {
           circles.push({ x: cx - side, y: sink + d.r * 0.2 * t, r: rs });
