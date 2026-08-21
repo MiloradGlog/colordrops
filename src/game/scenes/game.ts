@@ -286,7 +286,7 @@ export class GameScene implements Scene {
    */
   private effectiveInterval(): number {
     if (this.cfg.sequence !== null) return this.cfg.intervalS;
-    return Math.max(0.9, this.cfg.intervalS - 0.35 * Math.log2(1 + this.sessionSpawns / 4));
+    return Math.max(0.35, this.cfg.intervalS - 0.28 * Math.log2(1 + this.sessionSpawns / 4));
   }
 
   private updateSpawning(dt: number, L: Layout): void {

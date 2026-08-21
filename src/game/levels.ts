@@ -133,7 +133,7 @@ export function endlessConfig(board: number): RunConfig {
     targets: genTargets(rng, n, 0.08),
     epsilon: 0.025,
     growth: G_BASE / n,
-    intervalS: 2.0,
+    intervalS: 1.2,
     gravity: 1750,
     wrongCatch: "shrinkSelf",
     sequence: null,
