@@ -630,17 +630,23 @@ export class GameScene implements Scene {
       }
     }
 
-    // aligned indicator: hairline arcs floating outside the ring, spanning
-    // each aligned color's TARGET extent — the instrument's calibration marks
+    // aligned indicator: hairline arcs riding each segment's ACTUAL span —
+    // the mark belongs to the segment it certifies, wherever it currently
+    // sits. Fades in continuously as the color approaches tolerance.
     if (this.phase === "playing") {
-      ctx.strokeStyle = UI.text;
-      ctx.lineWidth = 1.5;
+      const eps = this.cfg.epsilon;
       for (let i = 0; i < this.n(); i++) {
-        if (Math.abs(this.shares[i]! - this.targets[i]!) > this.cfg.epsilon) continue;
-        const a0 = th + (this.bounds[i]! + SEP) * TAU;
-        const a1 = th + (this.bounds[i + 1]! - SEP) * TAU;
+        const dev = Math.abs(this.shares[i]! - this.targets[i]!);
+        const close = clamp01((2 * eps - dev) / eps); // 0 at 2ε, 1 at ε
+        if (close <= 0) continue;
+        const e = extents[i]!;
+        if (e.end - e.start <= SEP * 4) continue;
+        const a0 = th + (e.start + SEP * 2) * TAU;
+        const a1 = th + (e.end - SEP * 2) * TAU;
         ctx.beginPath();
         ctx.arc(cx, cy, outerR * 1.05, a0, a1);
+        ctx.strokeStyle = UI.hair(0.9 * close);
+        ctx.lineWidth = 1.5;
         ctx.stroke();
       }
     }
