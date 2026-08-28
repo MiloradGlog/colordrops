@@ -1,0 +1,30 @@
+{
+  "expo": {
+    "name": "ColorFall",
+    "slug": "colorfall",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#101214",
+    "icon": "./assets/icon.png",
+    "splash": {
+      "backgroundColor": "#101214",
+      "resizeMode": "contain",
+      "image": "./assets/splash.png"
+    },
+    "ios": {
+      "bundleIdentifier": "com.CHANGE_ME.colorfall",
+      "supportsTablet": false,
+      "infoPlist": {
+        "UIViewControllerBasedStatusBarAppearance": true
+      }
+    },
+    "android": {
+      "package": "com.CHANGE_ME.colorfall",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#101214"
+      }
+    }
+  }
+}

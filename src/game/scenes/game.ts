@@ -10,6 +10,7 @@ import type { SaveData } from "../../engine/save";
 import type { Audio } from "../../engine/audio";
 import { save } from "../../engine/save";
 import { ads } from "../../engine/ads";
+import { native } from "../../engine/native";
 import { Rng } from "../../engine/rng";
 import { PALETTE, UI, par, setType } from "../config";
 import { Liquid, rgba } from "../liquid";
@@ -233,11 +234,13 @@ export class GameScene implements Scene {
       const due = Math.min(this.n(), Math.floor(this.lockT / SNAP_PER_SEG));
       while (this.lockClicks < due) {
         this.audio.click(this.lockClicks++);
+        native.haptic("click");
         this.pings.push({ t: 0 });
       }
       if (!this.chordPlayed && this.lockT >= this.n() * SNAP_PER_SEG) {
         this.chordPlayed = true;
         this.audio.chord();
+        native.haptic("win");
         this.pings.push({ t: 0 });
       }
       if (this.lockT >= this.n() * SNAP_PER_SEG + MERGE_S) this.enterWon();
@@ -334,6 +337,7 @@ export class GameScene implements Scene {
       this.pulses[idx] = 1;
       this.streak++;
       this.audio.blip(this.streak);
+      native.haptic("light");
       if (!REDUCED_MOTION) this.hitStop = 0.05;
     } else if (this.cfg.wrongCatch === "shrinkDrop") {
       this.shares = applyShrink(this.shares, d.colorIdx, this.cfg.growth);

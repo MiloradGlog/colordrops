@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "check": "tsc --noEmit",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "build:expo": "vite build && node scripts/build-expo.mjs"
   },
   "devDependencies": {
     "playwright-core": "^1.62.1",
