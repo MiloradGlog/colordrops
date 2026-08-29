@@ -115,10 +115,15 @@ Post-v1: bonus-objective stars, leaderboards.
 Controls / save / audio / ads / localization: as v1. Multiplayer never.
 Leaderboards are post-v1 (until then, best-per-level is local).
 
-## Monetization
+## Monetization (designer-decided, 2026-08-15)
 
-As v1: interstitial slot after every 3rd level completion; rewarded slot
-reserved for "ghost guides" hint. Slots stubbed in browser.
+Two ad kinds, both wired into the flow (no-op/instant-grant stubs in the
+browser; real AdMob lands in the Expo shell):
+- **Interstitial** after every 3rd completed board — natural break only.
+- **Rewarded retry**: on the won screen, "RETRY BOARD · WATCH AD" replays
+  the EXACT board just finished (same seed → same targets, same drop
+  order) so an unhappy score can be avenged. Reward = the replay itself.
+The "ghost guides" hint remains a possible future rewarded slot.
 
 ## Post-v1 (explicitly out of scope now)
 

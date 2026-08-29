@@ -13,6 +13,7 @@ export const strings = {
   newBest: "NEW BEST",
   tapSelect: "TAP FOR LEVEL SELECT",
   tapNextBoard: "TAP FOR NEXT BOARD",
+  retryAd: "RETRY BOARD · WATCH AD",
   session: (drops: number, boards: number) =>
     `SESSION ${drops} DROPS / ${boards} BOARD${boards === 1 ? "" : "S"}`,
 } as const;

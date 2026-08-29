@@ -201,6 +201,33 @@ try {
     "s5/endless: tap after win starts a fresh board",
   );
 
+  // — s6: rewarded retry replays the EXACT same board —
+  const beforeRetry = await page.evaluate(() => {
+    window.__cd.auto(true);
+    let st = window.__cd.state();
+    for (let s = 0; s < 900 && st.phase === "playing"; s++) {
+      window.__cd.ff(1);
+      st = window.__cd.state();
+    }
+    window.__cd.ff(5);
+    window.__cd.auto(false);
+    return window.__cd.state();
+  });
+  assert(beforeRetry.phase === "won", "s6/retry: board 2 rewon for retry test");
+  await page.mouse.click(195, 238); // the RETRY BOARD · WATCH AD box
+  await page.waitForFunction(() => window.__cd.state().phase === "playing", null, { timeout: 4000 });
+  const afterRetry = await page.evaluate(() => window.__cd.state());
+  assert(
+    afterRetry.caught === 0 &&
+      afterRetry.name === beforeRetry.name &&
+      JSON.stringify(afterRetry.targets) === JSON.stringify(beforeRetry.targets),
+    "s6/retry: rewarded retry restarts the identical board (same name, same targets, count reset)",
+  );
+  assert(
+    debugLogs.some((t) => t.includes("[ads] rewarded slot: retry-board")),
+    "s6/retry: rewarded slot fired for the retry",
+  );
+
   // — s7: the ramp — drop cadence tightens as the session goes on —
   const ramp = await page.evaluate(() => {
     const before = window.__cd.state();

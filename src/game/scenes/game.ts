@@ -67,6 +67,7 @@ export class GameScene implements Scene {
   private fxRng = new Rng(0xfeedface); // presentation-only randomness, still seeded
   private tapStart: { x: number; y: number } | null = null;
   private newBest = false;
+  private adBusy = false;
   private streak = 0;
   private hitStop = 0;
   private shake = 0;
@@ -245,8 +246,18 @@ export class GameScene implements Scene {
       }
       if (this.lockT >= this.n() * SNAP_PER_SEG + MERGE_S) this.enterWon();
     } else if (this.phase === "won") {
-      if (this.input.pointer.justPressed) {
-        if (this.cfg.sequence === null) {
+      if (this.input.pointer.justPressed && !this.adBusy) {
+        const w = this.wonLayout(L);
+        const y = this.input.pointer.y;
+        if (y >= w.retryY - 18 && y <= w.retryY + 12) {
+          // rewarded retry: watch an ad, replay THIS exact board — same
+          // seed, same targets, same drop order — to beat your own count
+          this.adBusy = true;
+          void ads.rewarded("retry-board").then((granted) => {
+            this.adBusy = false;
+            if (granted) this.reset(this.cfg);
+          });
+        } else if (this.cfg.sequence === null) {
           this.endlessBoard++;
           this.reset(endlessConfig(this.endlessBoard));
         } else {
@@ -779,9 +790,13 @@ export class GameScene implements Scene {
     }
   }
 
+  private wonLayout(L: Layout): { base: number; retryY: number } {
+    const base = Math.max(64, (L.cy - L.outerR) * 0.3);
+    return { base, retryY: base + 126 };
+  }
+
   private drawWon(ctx: CanvasRenderingContext2D, L: Layout): void {
-    const wheelTop = L.cy - L.outerR;
-    const base = Math.max(64, wheelTop * 0.3);
+    const { base, retryY } = this.wonLayout(L);
     ctx.textAlign = "center";
     ctx.fillStyle = UI.text;
     setType(ctx, 600, 24, 8);
@@ -822,6 +837,16 @@ export class GameScene implements Scene {
     ctx.fillStyle = UI.text;
     setType(ctx, 600, 11, 5);
     ctx.fillText(this.cfg.sequence === null ? strings.tapNextBoard : strings.tapSelect, L.cx, base + 94);
+
+    // rewarded retry: replay this exact board for a better count
+    setType(ctx, 400, 9, 2);
+    const label = strings.retryAd;
+    const tw = ctx.measureText(label).width;
+    ctx.strokeStyle = UI.hair(this.adBusy ? 0.1 : 0.28);
+    ctx.lineWidth = 1;
+    ctx.strokeRect(L.cx - tw / 2 - 12, retryY - 14, tw + 24, 22);
+    ctx.fillStyle = this.adBusy ? UI.hair(0.25) : UI.muted;
+    ctx.fillText(label, L.cx, retryY);
   }
 
   private symbolsOn(): boolean {

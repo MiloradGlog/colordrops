@@ -120,6 +120,12 @@
           "title": "Interstitial slot after every 3rd level completion (no-op stub in browser)",
           "done": true,
           "verify": "stub logs interstitial exactly on 3rd, 6th, 9th completion"
+        },
+        {
+          "id": "rewarded-retry",
+          "title": "Rewarded retry on the won screen: replay the exact same board (same seed) for a better count",
+          "done": true,
+          "verify": "headless: retry tap restores identical name+targets with count reset; rewarded slot logged"
         }
       ]
     },
